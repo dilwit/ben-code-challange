@@ -1,1 +1,1 @@
-{}
+{ "code": "UNAUTHORIZED", "message": "Missing or invalid API key" }

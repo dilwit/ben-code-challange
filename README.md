@@ -26,9 +26,9 @@ Open http://localhost:3000.
 
 | Input | Result |
 |---|---|
-| Any valid loan amount (e.g. `250000`), term and risk band `LOW` / `MEDIUM` / `HIGH` | A quote for that band most of the time. About 1 in 5 requests fail at random (`MOCK_ERROR_RATE`, default `0.2`) to simulate an unreliable vendor |
+| Any valid loan amount (e.g. `250000`), term and risk band `LOW` / `MEDIUM` / `HIGH` | A quote for that band most of the time. About 1 in 5 requests fail at random (`ERROR_RATE` in `mock-api/server.mjs`) to simulate an unreliable vendor |
 | Loan amount `13` | Always an API error, picked at random: rejected request, server error, service unavailable, unexpected response, timeout or connection dropped |
-| Wrong `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed) | API rejects the key |
+| Empty `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed) | The app refuses to call the API (configuration error). The mock itself rejects a missing or empty `x-api-key` header; it accepts any non-empty value |
 | Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600` | A field error; **Generate** stays disabled |
 
 The **Generate** button stays disabled until all three fields are **valid**, not just filled in.
@@ -38,7 +38,7 @@ What the browser shows:
 - **Field errors** for invalid input, under the field.
 - **The same generic error** for every failure once the request is sent: vendor API failures, server-side problems, a lost connection, or no answer from the app's server within 10 seconds. The terminal running `pnpm dev` shows which error the mock picked and why; the browser console shows the cause of browser-side failures.
 
-Mock responses live in `mock-api/commission-quote-api/fixtures/`. Edit them, or `scenarios.json`, to change what the mock returns. Set `MOCK_ERROR_RATE=0` to turn random failures off, or `1` to make every request fail.
+Mock responses live in `mock-api/commission-quote-api/fixtures/`. Edit them, or `scenarios.json`, to change what the mock returns. To change how often it fails at random, edit `ERROR_RATE` at the top of `mock-api/server.mjs` (`0` never, `1` always) and restart.
 
 ## Configuration (`.env.local`)
 

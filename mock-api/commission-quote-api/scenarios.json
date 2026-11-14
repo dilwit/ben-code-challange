@@ -1,1 +1,24 @@
-{}
+{
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/commission-quotes",
+      "auth": { "header": "x-api-key", "status": 401, "fixture": "unauthorized.json" },
+      "forceError": { "field": "loanAmount", "equals": 13 },
+      "errorPool": [
+        { "name": "validation-error", "status": 422, "fixture": "validation-error.json" },
+        { "name": "server-error", "status": 500, "fixture": "server-error.json" },
+        { "name": "service-unavailable", "status": 503, "fixture": "service-unavailable.json" },
+        { "name": "invalid-quote", "status": 201, "fixture": "invalid-quote.json" },
+        { "name": "timeout", "behaviour": "timeout" },
+        { "name": "connection-dropped", "behaviour": "drop" }
+      ],
+      "responses": [
+        { "when": { "riskBand": "LOW" }, "status": 201, "fixture": "quote-low.json" },
+        { "when": { "riskBand": "MEDIUM" }, "status": 201, "fixture": "quote-medium.json" },
+        { "when": { "riskBand": "HIGH" }, "status": 201, "fixture": "quote-high.json" }
+      ],
+      "fallback": { "status": 422, "fixture": "validation-error.json" }
+    }
+  ]
+}

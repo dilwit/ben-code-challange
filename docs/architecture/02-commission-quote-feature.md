@@ -153,7 +153,7 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 **Timeout vs unmount.** Both cases make `fetch` reject with an `AbortError`, but E15 must show the generic error and E18 must show nothing. So each case gets its own signal, and the function checks which one fired:
 
 1. **Unmount signal:** the form owns an `AbortController`, aborts it in its effect cleanup and passes `controller.signal` in.
-2. **Timeout signal:** `requestCommissionQuote()` creates its own `AbortController` and aborts it with `setTimeout(…, GENERATE_QUOTE_REQUEST_TIMEOUT_MS)`. The timer is cleared in `finally`. It is built on `setTimeout` on purpose, **not** `AbortSignal.timeout()`, so Playwright's `page.clock` and Vitest's fake timers can control it (see section 10).
+2. **Timeout signal:** `requestCommissionQuote()` creates its own `AbortController` and aborts it with `setTimeout(…, GENERATE_QUOTE_REQUEST_TIMEOUT_MS)`. The timer is cleared in `finally`. It is built on `setTimeout` on purpose, **not** `AbortSignal.timeout()`, so Vitest's fake timers can control it (see section 10).
 3. `fetch` gets `AbortSignal.any([unmountSignal, timeoutSignal])`.
 4. On an `AbortError`, the **unmount signal is checked first**: if `unmountSignal.aborted`, return `aborted`; otherwise return `timeout`. Unmount wins when both have fired, because there is no component left to show a message in.
 5. The form ignores `aborted` and doesn't update state, so nothing is set on an unmounted component.
@@ -256,7 +256,19 @@ The browser-side timeout is **not** an env variable. `GENERATE_QUOTE_REQUEST_TIM
 
 ## 8. Mock Commission Quote API
 
-Location: `mock-api/commission-quote-api/`, served by `mock-api/server.mjs` on port `4010` under the path prefix `/commission-quote-api`. So the endpoint is `POST http://localhost:4010/commission-quote-api/commission-quotes`. The expected key comes from `MOCK_API_KEY`, default `local-dev-key`.
+Location: `mock-api/commission-quote-api/`, served by `mock-api/server.mjs` under the path prefix `/commission-quote-api`. So the endpoint is `POST http://localhost:4010/commission-quote-api/commission-quotes`. `pnpm mock` runs it on its own; `pnpm dev` runs it alongside the app.
+
+Its settings are constants at the top of `server.mjs`. It reads no environment variables, so changing one means editing the file and restarting:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `PORT` | `4010` | Port to listen on |
+| `ERROR_RATE` | `0.2` | Share of requests that fail at random, from `0` (never) to `1` (always) |
+| `TIMEOUT_DELAY_MS` | `10000` | How long the "timeout" error waits before closing the connection |
+
+`server.mjs` is kept deliberately small (about 90 lines, Node built-ins only), because it is a local stand-in, not production code. It doesn't check fixtures at startup. A typo shows up as a wrong response or a crash in the `[mock]` output.
+
+**API key:** the mock checks that an `x-api-key` header is present **and** has a value. A missing header, an empty value or whitespace only gets `401`. Any other value is accepted, so it rejects requests without a key but not requests with a wrong key. The app's handling of a rejected key (E8) is tested with MSW, not against the mock.
 
 The mock returns **pre-configured JSON only**. It does not calculate anything, so `totalCommission` is a fixed value per risk band whatever loan amount is entered.
 
@@ -266,14 +278,34 @@ Rules live in `scenarios.json` and are checked in order:
 
 | #   | Request                                                                                                 | Response                                                                                                                  |
 | --- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Missing or wrong `x-api-key`                                                                            | `401` `unauthorized.json`                                                                                                 |
-| 2   | `loanAmount` equals `forceErrorLoanAmount` (default `13`)                                               | **One error picked at random** from the error pool below. A deterministic way to get _an_ error, for demos and e2e tests. |
-| 3   | **Any other request, at random**, with probability `MOCK_ERROR_RATE` (default `0.2`, i.e. about 1 in 5) | **One error picked at random** from the error pool below                                                                  |
+| 1   | `x-api-key` header missing or empty (any non-empty value is accepted)                                   | `401` `unauthorized.json`                                                                                                 |
+| 2   | `loanAmount` equals `13` (`forceError` in `scenarios.json`)                                             | **One error picked at random** from the error pool below. A deterministic way to get _an_ error, for demos.               |
+| 3   | **Any other request, at random**, with probability `ERROR_RATE` (`0.2`, i.e. about 1 in 5)              | **One error picked at random** from the error pool below                                                                  |
 | 4   | `riskBand` = `LOW`                                                                                      | `201` `quote-low.json`                                                                                                    |
 | 5   | `riskBand` = `MEDIUM`                                                                                   | `201` `quote-medium.json`                                                                                                 |
 | 6   | `riskBand` = `HIGH`                                                                                     | `201` `quote-high.json`                                                                                                   |
+| 7   | Anything else: body isn't JSON, or matches no response (e.g. `riskBand` = `EXTREME`)                     | `422` `validation-error.json` (`fallback`)                                                                                |
 
-Rule 3 is the real simulation of network conditions. Any valid request can fail without warning, as a real vendor API might. Rule 2 exists only so that error handling can be shown and tested on demand. `MOCK_ERROR_RATE` takes a number from `0` (never) to `1` (always). Playwright sets it to `0`, so happy-path e2e tests never fail at random.
+A request whose method and path match no route gets `404`.
+
+`scenarios.json` declares everything, so `server.mjs` holds no API-specific logic or validation:
+
+```json
+{
+  "routes": [{
+    "method": "POST", "path": "/commission-quotes",
+    "auth": { "header": "x-api-key", "status": 401, "fixture": "unauthorized.json" },
+    "forceError": { "field": "loanAmount", "equals": 13 },
+    "errorPool": [{ "name": "server-error", "status": 500, "fixture": "server-error.json" }, { "name": "timeout", "behaviour": "timeout" }, "…"],
+    "responses": [{ "when": { "riskBand": "LOW" }, "status": 201, "fixture": "quote-low.json" }, "…"],
+    "fallback": { "status": 422, "fixture": "validation-error.json" }
+  }]
+}
+```
+
+Fixtures are read from disk on every request, so edits apply without restarting the mock.
+
+Rule 3 is the real simulation of network conditions. Any valid request can fail without warning, as a real vendor API might. Rule 2 exists only so that error handling can be shown on demand.
 
 **Error pool** (listed in `scenarios.json`, so it can be changed without code):
 
@@ -283,11 +315,11 @@ Rule 3 is the real simulation of network conditions. Any valid request can fail 
 | Server error        | `500` `server-error.json`                                                                |
 | Service unavailable | `503` `service-unavailable.json`                                                         |
 | Unexpected response | `201` `invalid-quote.json` (body doesn't match `CommissionQuote`)                        |
-| Timeout             | No reply for `MOCK_TIMEOUT_DELAY_MS` (default `10000`), longer than the app's timeout    |
+| Timeout             | No reply for `TIMEOUT_DELAY_MS` (`10000`), longer than the app's timeout                 |
 | Connection dropped  | The mock closes the socket without replying, so the app route sees a network error (E19) |
 
 - The mock prints the error it picked and why to its terminal, e.g. `[mock] random failure (rate 0.2) → 503 service-unavailable` or `[mock] forced (loanAmount 13) → 422 validation-error`, so you can see what happened behind the generic message.
-- Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user or an e2e test sees. Tests that need one specific error use MSW in unit tests instead (see below).
+- Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user sees. Tests that need one specific error use MSW in unit tests instead (see below).
 
 Example fixture values:
 
@@ -297,13 +329,13 @@ Example fixture values:
 | `quote-medium.json` | `Q-MED-0001`  | `0.015`          | `3750`            |
 | `quote-high.json`   | `Q-HIGH-0001` | `0.02`           | `5000`            |
 
-The mock keeps no state between requests, so parallel e2e tests don't interfere with each other.
+The mock keeps no state between requests.
 
 **Adding an error:** add a JSON file to `fixtures/` and an entry to the error pool in `scenarios.json`. No code change is needed. `fixtures.contract.test.ts` fails if a fixture no longer matches the data model (except `invalid-quote.json`, which must **fail** to parse as `CommissionQuote`).
 
 The same fixtures are served by MSW in unit tests. There, each test picks the exact fixture it needs (no randomness), so every error kind is tested deterministically.
 
-The mock only covers hop 2. Hop 1 errors (E12, E15–E18) can't come from the mock, because they happen between the browser and our own app route. They are tested by stubbing `fetch` in browser tests and by intercepting `/api/commission-quotes` with Playwright's `page.route()` in e2e tests (see section 10).
+The mock only covers hop 2. Hop 1 errors (E12, E15–E18) can't come from the mock, because they happen between the browser and our own app route. They are tested by stubbing `fetch` in unit and browser tests (see section 10).
 
 ## 9. Files
 
@@ -334,7 +366,7 @@ src/
 mock-api/
 ├── server.mjs                # serves each <name>-api/ folder under /<name>-api
 └── commission-quote-api/
-    ├── scenarios.json        # rules, forceErrorLoanAmount, error pool
+    ├── scenarios.json        # routes: auth, forceError, errorPool, responses, fallback
     └── fixtures/             # quote-low|medium|high, unauthorized, validation-error,
                               # server-error, service-unavailable, invalid-quote
                               # (timeout and connection-dropped are rules, not files)
@@ -354,11 +386,9 @@ mock-api/
 | Formatting         | `format.test.ts`                                     | `0.015` → `1.50%`; `3750` → `$3,750.00`                                                                                                                                                                                                                                                                                             | S1                         |
 | Form (browser)     | `commission-quote-form.browser.test.tsx`             | Generate disabled until valid; field errors after touch; no double submit; every failure kind shows the generic error; no message after unmount; alert cleared on retry; new result replaces old                                                                                                                 | S3, E1–E5, E12, E14–E18, E20, E21 |
 | Result (browser)   | `commission-quote-result.browser.test.tsx`           | Shows quote ID, formatted rate and total                                                                                                                                                                                                                                                                                            | S1                         |
-| End to end         | `page.e2e.ts`                                        | A quote for each risk band; Generate disabled until valid; the forced-error amount (`13`) shows the generic error; changing the amount and generating again clears the alert and shows a quote. Hop 1 failures via `page.route()` on `/api/commission-quotes`: request aborted, never answered with the clock advanced past the timeout, and HTML `500` page each show the generic error | S1–S2, E1, E7–E12, E14–E17 |
+| End to end         | `page.e2e.ts`                                        | **One happy path only**: fill in the form, click Generate, see a quote. Every other scenario is covered by the unit and browser tests above | S1 |
 
-Playwright starts the mock with `MOCK_ERROR_RATE=0` (no random failures, so tests are deterministic) and the app with `COMMISSION_QUOTE_API_TIMEOUT_MS=1000`, so a timeout picked from the pool for the forced-error amount fails within about a second instead of five.
-
-The timeout e2e test calls `page.clock.install()` **before** `page.goto()`, has `page.route()` hold the request without answering, then calls `page.clock.runFor(GENERATE_QUOTE_REQUEST_TIMEOUT_MS)`. This works because the browser timeout is a plain `setTimeout`, which `page.clock` fakes (see section 3). `AbortSignal.timeout()` would not be reliably faked, and the test would hang.
+Playwright starts the mock and the app (production build) itself. Because the mock fails about 1 in 5 requests at random, Playwright retries a failed test up to 2 times. The chance that the happy path fails three times in a row by bad luck is under 1%.
 
 ## 11. Out of scope
 

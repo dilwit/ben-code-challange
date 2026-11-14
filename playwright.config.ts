@@ -8,7 +8,8 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // The mock fails about 1 in 5 requests at random, so retry to keep the happy path from flaking.
+  retries: 2,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: APP_URL,
@@ -17,10 +18,19 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
+      command: 'pnpm mock',
+      port: 4010,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
       command: `pnpm build && pnpm start --port ${APP_PORT}`,
       url: APP_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
+      env: {
+        COMMISSION_QUOTE_API_BASE_URL: 'http://localhost:4010/commission-quote-api',
+        COMMISSION_QUOTE_API_KEY: 'e2e-key',
+      },
     },
   ],
 })
