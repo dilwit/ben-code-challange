@@ -30,9 +30,9 @@ Open http://localhost:3000. Ports 3000 and 4010 must be free; if the mock can't 
 | Loan amount `13`                                                                    | Always an API error, picked at random: rejected request, server error, service unavailable, unexpected response, timeout or connection dropped                                                                                                                                                |
 | Empty `COMMISSION_QUOTE_API_KEY` in `.env.local`                                    | The app **refuses to start** and lists every invalid setting (never its value). `pnpm dev` stops the mock too                                                                                                                                                                                 |
 | Wrong `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed)                   | The mock rejects the key (`401`); the browser shows the generic error and the terminal shows "rejected the API key". The mock accepts only `local-dev-key`                                                                                                                                    |
-| Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600`            | Clicking **Generate quote** shows the field error and sends nothing                                                                                                                                                                                                                           |
+| Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600`            | Clicking **Generate Quote** shows the field error and sends nothing                                                                                                                                                                                                                           |
 
-**Generate quote** is always clickable (except while a quote is being generated). If anything is missing or invalid, clicking it shows every field's error and moves focus to the first one; nothing is sent until all three are valid.
+**Generate Quote** is always clickable (except while a quote is being generated). If anything is missing or invalid, clicking it shows every field's error and moves focus to the first one; nothing is sent until all three are valid.
 
 What the browser shows:
 
@@ -73,8 +73,8 @@ Tests sit next to the code they test:
 
 I used **Claude Code** (Anthropic's Claude) as a pair programmer throughout this challenge.
 
-- **Design before code.** I worked out the design and implmentation with Claude in two docs (`docs/architecture/`), This is a result of interactive sesssion between me and Claude where ideas were bounced and agreed for the given scope.
-- **Implementation.** 90% of the code is written by the Claude, layer by layer with human review at every layer. And many decision were challanged and simplification applied as part of human review.
+- **Design before code.** I worked out the design and implementation with Claude in two docs (`docs/architecture/`). This is the result of an interactive session between me and Claude where ideas were bounced and agreed for the given scope.
+- **Implementation.** 90% of the code is written by Claude, layer by layer with human review at every layer. Many decisions were challenged, and simplifications applied, as part of human review.
 
 ## Future improvements
 

@@ -156,7 +156,7 @@ export default function CommissionQuoteForm() {
             disabled={isGenerating}
             className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isGenerating ? 'Generating…' : 'Generate quote'}
+            {isGenerating ? 'Generating…' : 'Generate Quote'}
           </button>
         </fieldset>
 

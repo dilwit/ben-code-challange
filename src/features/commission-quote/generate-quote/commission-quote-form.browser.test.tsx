@@ -178,7 +178,7 @@ describe('CommissionQuoteForm', () => {
       await expect.element(screen.getByText('Q-LOW-0001')).toBeVisible()
       await expect.element(screen.getByText('1.00%')).toBeVisible()
       await expect.element(screen.getByText('$2,500.00')).toBeVisible()
-      await expect.element(generate).toHaveTextContent('Generate quote')
+      await expect.element(generate).toHaveTextContent('Generate Quote')
       await expect.element(amount).toBeEnabled()
     })
 
