@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import {
-  GENERATE_QUOTE_REQUEST_TIMEOUT_MS,
-  generateCommissionQuoteAction,
-} from './generate-commission-quote-action'
+import { GENERATE_QUOTE_REQUEST_TIMEOUT_MS } from '../model'
+import { generateCommissionQuoteAction } from './generate-commission-quote-action'
 
 const request = { loanAmount: 250000, loanTermInMonths: 360, riskBand: 'MEDIUM' as const }
 const quote = { quoteId: 'Q-MED-0001', commissionRate: 0.015, totalCommission: 3750 }

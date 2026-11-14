@@ -16,23 +16,23 @@ Each scenario becomes an acceptance check. Section 10 maps them to tests.
 
 **Main flow**
 
-| #   | Scenario            | Given                      | When                                                       | Then                                                                                              |
-| --- | ------------------- | -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| S1  | Generate a quote    | All three fields are valid | The user clicks **Generate**                               | The button shows "Generating…", then the quote ID, commission rate and total commission are shown |
-| S2  | Quote per risk band | Valid amount and term      | The user generates with `LOW`, `MEDIUM` and `HIGH` in turn | Each risk band returns its own quote                                                              |
-| S3  | Generate again      | A quote is shown           | The user changes a value and clicks **Generate**           | The previous result is replaced by the new quote                                                  |
+| #   | Scenario            | Given                      | When                                                       | Then                                                                                                                                     |
+| --- | ------------------- | -------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | Generate a quote    | All three fields are valid | The user clicks **Generate**                               | The button shows "Generating…", then the quote ID, commission rate and total commission are shown                                        |
+| S2  | Quote per risk band | Valid amount and term      | The user generates with `LOW`, `MEDIUM` and `HIGH` in turn | Each risk band returns its own quote                                                                                                     |
+| S3  | Generate again      | A quote is shown           | The user changes a value, then clicks **Generate quote**   | The old quote disappears as soon as the value changes (so a shown quote always matches the form); the new quote is shown after the click |
 
 **Input errors (handled in the browser before anything is sent)**
 
-| #   | Scenario                | Given                                                      | When                                 | Then                                                                                           |
-| --- | ----------------------- | ---------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| E1  | Missing fields          | One or more fields are empty                               | The page is shown or a field changes | **Generate** is disabled                                                                       |
-| E2  | Invalid loan amount     | Loan amount is `0`, negative or not a number               | The user leaves the field            | "Enter a loan amount greater than 0" is shown and **Generate** is disabled                     |
-| E20 | Loan amount too precise | Loan amount has more than 2 decimal places (e.g. `0.001`)  | The user leaves the field            | "Enter a loan amount with no more than 2 decimal places" is shown and **Generate** is disabled |
-| E21 | Loan amount too large   | Loan amount is above `100000000` (e.g. `1e300`)            | The user leaves the field            | "Enter a loan amount up to $100,000,000" is shown and **Generate** is disabled                 |
-| E3  | Invalid loan term       | Loan term is `0`, negative, has decimals or is above `600` | The user leaves the field            | "Enter a loan term in whole months from 1 to 600" is shown and **Generate** is disabled        |
-| E4  | No risk band            | No risk band is selected                                   | The user leaves the field            | "Select a risk band" is shown and **Generate** is disabled                                     |
-| E5  | Double submit           | A request is in progress                                   | The user clicks again                | Nothing happens: the button is disabled until the response arrives                             |
+| #   | Scenario                | Given                                                      | When                               | Then                                                                                   |
+| --- | ----------------------- | ---------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| E1  | Missing fields          | One or more fields are empty                               | The user clicks **Generate quote** | Every missing field shows its error, focus moves to the first one, and nothing is sent |
+| E2  | Invalid loan amount     | Loan amount is `0`, negative or not a number               | The user clicks **Generate quote** | "Enter a loan amount greater than 0" is shown and nothing is sent                      |
+| E20 | Loan amount too precise | Loan amount has more than 2 decimal places (e.g. `0.001`)  | The user clicks **Generate quote** | "Enter a loan amount with no more than 2 decimal places" is shown and nothing is sent  |
+| E21 | Loan amount too large   | Loan amount is above `100000000` (e.g. `1e300`)            | The user clicks **Generate quote** | "Enter a loan amount up to $100,000,000" is shown and nothing is sent                  |
+| E3  | Invalid loan term       | Loan term is `0`, negative, has decimals or is above `600` | The user clicks **Generate quote** | "Enter a loan term in whole months from 1 to 600" is shown and nothing is sent         |
+| E4  | No risk band            | No risk band is selected                                   | The user clicks **Generate quote** | "Select a risk band" is shown and nothing is sent                                      |
+| E5  | Double submit           | A request is in progress                                   | The user clicks again              | Nothing happens: the button is disabled until the response arrives                     |
 
 Errors are handled at both hops. Each hop catches **every** failure, including timeouts and network errors, and turns it into a known outcome:
 
@@ -44,25 +44,25 @@ All errors below are shown in an alert, and the form keeps its values so the use
 
 **Hop 1: errors between the UI and the app route**
 
-| #   | Scenario                               | Given                                                                                                                                                                      | When                                         | Then                                                                                                                     |
-| --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| E12 | Network error                          | The browser can't reach `/api/commission-quotes` (offline, DNS failure, connection dropped)                                                                                | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                                                                      |
-| E15 | App route too slow                     | The app route doesn't answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (10 seconds)                                                                                       | The user clicks **Generate**                 | The request is aborted and the **generic error** is shown; details are logged to the browser console                                                                 |
+| #   | Scenario                               | Given                                                                                                                                                                      | When                                         | Then                                                                                                           |
+| --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| E12 | Network error                          | The browser can't reach `/api/commission-quotes` (offline, DNS failure, connection dropped)                                                                                | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                      |
+| E15 | App route too slow                     | The app route doesn't answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (10 seconds)                                                                                       | The user clicks **Generate**                 | The request is aborted and the **generic error** is shown; details are logged to the browser console           |
 | E16 | App route crashes                      | The app route throws an unexpected exception                                                                                                                               | The user clicks **Generate**                 | The route catches it and returns `500` `fail`; the server logs the stack trace; the **generic error** is shown |
-| E17 | Unexpected response from the app route | The response isn't JSON (e.g. an HTML error page), has a status the UI doesn't expect (e.g. `404`, `405`, `413`), or is a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                                |
-| E18 | User leaves during a request           | A request is in progress                                                                                                                                                   | The user navigates away or the form unmounts | The request is aborted; no error is shown                                                                                |
+| E17 | Unexpected response from the app route | The response isn't JSON (e.g. an HTML error page), has a status the UI doesn't expect (e.g. `404`, `405`, `413`), or is a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                      |
+| E18 | User leaves during a request           | A request is in progress                                                                                                                                                   | The user navigates away or the form unmounts | The request is aborted; no error is shown                                                                      |
 
 **Hop 2: errors between the app route and the Commission Quote API**
 
-| #   | Scenario                              | Given                                                                                                                         | When                                     | Then                                                                                                                                                                                           |
-| --- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E6  | Invalid request reaches the app route | A request bypasses the form with bad data                                                                                     | It is posted to `/api/commission-quotes` | The route returns `400` with the field issues and the Commission Quote API is **not** called                                                                                                   |
-| E7  | Request rejected by the API           | The Commission Quote API returns `422`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the API's message is logged on the server only                                                                                                                 |
-| E8  | API key rejected                      | The Commission Quote API returns `401`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the server logs an authentication failure                                                                                                                      |
-| E9  | Quote service error                   | The Commission Quote API returns `5xx`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the server logs the status                                                                                                                                     |
-| E10 | Unexpected response                   | The Commission Quote API returns a non-JSON body, an unexpected status, or a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**             | The **generic error** is shown; the server logs the mismatch                                                                                                                                   |
-| E11 | Quote service too slow                | The Commission Quote API doesn't answer within `COMMISSION_QUOTE_API_TIMEOUT_MS`                                              | The user clicks **Generate**             | The **generic error** is shown; the server logs the timeout                                                                                                                                    |
-| E19 | Quote service unreachable             | The app route can't connect to the Commission Quote API (connection refused, DNS failure, mock not running)                   | The user clicks **Generate**             | The **generic error** is shown; the server logs the network error                                                                                                                              |
+| #   | Scenario                              | Given                                                                                                                         | When                                     | Then                                                                                                                                                                                    |
+| --- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E6  | Invalid request reaches the app route | A request bypasses the form with bad data                                                                                     | It is posted to `/api/commission-quotes` | The route returns `400` with the field issues and the Commission Quote API is **not** called                                                                                            |
+| E7  | Request rejected by the API           | The Commission Quote API returns `422`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the API's message is logged on the server only                                                                                                          |
+| E8  | API key rejected                      | The Commission Quote API returns `401`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the server logs an authentication failure                                                                                                               |
+| E9  | Quote service error                   | The Commission Quote API returns `5xx`                                                                                        | The user clicks **Generate**             | The **generic error** is shown; the server logs the status                                                                                                                              |
+| E10 | Unexpected response                   | The Commission Quote API returns a non-JSON body, an unexpected status, or a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**             | The **generic error** is shown; the server logs the mismatch                                                                                                                            |
+| E11 | Quote service too slow                | The Commission Quote API doesn't answer within `COMMISSION_QUOTE_API_TIMEOUT_MS`                                              | The user clicks **Generate**             | The **generic error** is shown; the server logs the timeout                                                                                                                             |
+| E19 | Quote service unreachable             | The app route can't connect to the Commission Quote API (connection refused, DNS failure, mock not running)                   | The user clicks **Generate**             | The **generic error** is shown; the server logs the network error                                                                                                                       |
 | E13 | Missing configuration                 | `COMMISSION_QUOTE_API_BASE_URL`, `COMMISSION_QUOTE_API_KEY` or `COMMISSION_QUOTE_API_TIMEOUT_MS` is missing or invalid        | The server starts                        | The server **refuses to start**: it prints every invalid variable (never a value) and exits with code 1, so nothing is served. Checked once in `src/instrumentation.ts` (see section 7) |
 
 **Recovery**
@@ -73,10 +73,10 @@ All errors below are shown in an alert, and the form keeps its values so the use
 
 **Messages the user can see**
 
-| Message            | Text                                                         | Used for                   |
-| ------------------ | ------------------------------------------------------------ | -------------------------- |
-| Generic error      | "We couldn't generate a quote right now. Please try again."  | E7–E12, E15–E17, E19       |
-| Field errors       | Shown under each field by the form's own validation       | E2–E4, E20, E21            |
+| Message       | Text                                                        | Used for             |
+| ------------- | ----------------------------------------------------------- | -------------------- |
+| Generic error | "We couldn't generate a quote right now. Please try again." | E7–E12, E15–E17, E19 |
+| Field errors  | Shown under each field by the form's own validation         | E2–E4, E20, E21      |
 
 Every failure after the request is sent, on either hop, shows the same generic error. The user can only do one thing in every case (try again), so separate messages would add UI states without helping them. The specific cause is still logged: hop 1 to the browser console, hop 2 on the server.
 
@@ -128,23 +128,25 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 
 ### Form fields
 
-| Field       | Control                                                | Notes                                        |
-| ----------- | ------------------------------------------------------ | -------------------------------------------- |
-| Loan amount | Text input, `inputMode="decimal"`, label "Loan amount ($)" | Empty means missing                      |
-| Loan term   | Text input, `inputMode="numeric"`, label "Loan term (months)" | Whole numbers only                    |
-| Risk band   | Select, label "Risk band", options Low / Medium / High | No default; placeholder "Select a risk band" |
+| Field       | Control                                                       | Notes                                        |
+| ----------- | ------------------------------------------------------------- | -------------------------------------------- |
+| Loan amount | Text input, `inputMode="decimal"`, label "Loan amount ($)"    | Empty means missing                          |
+| Loan term   | Text input, `inputMode="numeric"`, label "Loan term (months)" | Whole numbers only                           |
+| Risk band   | Select, label "Risk band", options Low / Medium / High        | No default; placeholder "Select a risk band" |
 
 ### Behaviour
 
-| State                           | What the user sees                                                                                                                                                         |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Incomplete or invalid input** | **Generate** is disabled until every field is **valid**, not just filled in. A field shows its error once it has been touched (e.g. "Enter a loan amount greater than 0"). |
-| **Valid input**                 | **Generate** is enabled.                                                                                                                                                   |
-| **Submitting**                  | Button shows "Generating…" and is disabled; the fields are disabled too (one `<fieldset disabled>`), so the values can't change mid-request.                                                                                                          |
-| **Success**                     | Result panel shows Quote ID, Commission rate (`1.50%`) and Total commission (`$3,750.00`). The form stays filled in so the user can change a value and generate again.     |
-| **Error**                       | An alert shows the generic error. The form stays filled in so the user can retry.                                  |
+| State                                              | What the user sees                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Before the first click**                         | No errors are shown, even after leaving a field. **Generate quote** is enabled.                                                                                                                                                                                                       |
+| **Generate clicked with missing or invalid input** | Every invalid field shows its error (e.g. "Enter a loan amount greater than 0"), focus moves to the first one, and nothing is sent. Errors then update as the user types and clear once the value is valid.                                                                           |
+| **Submitting**                                     | Button shows "Generating…" and is disabled; the fields are disabled too (one `<fieldset disabled>`), so the values can't change mid-request.                                                                                                                                          |
+| **Success**                                        | Result panel shows Quote ID, Commission rate (`1.50%`) and Total commission (`$3,750.00`). The form stays filled in so the user can change a value and generate again. **Any change to a field clears the shown quote**, so staff can never copy a quote that doesn't match the form. |
+| **Error**                                          | An alert shows the generic error. The form stays filled in so the user can retry.                                                                                                                                                                                                     |
 
-- **React Hook Form** runs the validation, through `zodResolver`, with `mode: 'onTouched'`: a field shows its error once the user has left it, then updates as they type. Generate is `disabled` until `formState.isValid`.
+- **React Hook Form** runs the validation, through `zodResolver`, with `mode: 'onSubmit'` and `reValidateMode: 'onChange'`. Errors first appear when **Generate quote** is clicked, all at once, and focus moves to the first invalid field; after that they update as the user types.
+- **Generate quote is never disabled for invalid input**, only while a request is in progress (E5). A disabled button can't be focused, many screen readers skip it, and it doesn't say why; clicking it now explains what's missing.
+- **No errors on leaving a field:** an error appearing then pushes the button down while it's being pressed, so the mouse is released somewhere else and the click is lost. Validating on submit avoids that.
 - The rules and messages are the **same `commissionQuoteRequestSchema` as the server** (`model.ts`). The form only adds a text-to-value step in front of each field, `z.string().transform(...).pipe(shape.<field>)`:
   - **An empty field counts as missing, not `0`.** `Number('')` is `0`, which would show "greater than 0" for a field the user hasn't filled in. Any other text goes through `Number()`, so `abc` is rejected as not a number.
   - The risk band's empty placeholder (`""`) counts as missing.
@@ -183,13 +185,13 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 
 Every answer has the same shape, `{ status, data }` (`src/shared/lib/api-response.ts`). The HTTP status code still says what happened:
 
-| Status | When | Body |
-| --- | --- | --- |
-| `201` | Quote generated | `{ "status": "success", "data": { "quoteId": "…", "commissionRate": 0.015, "totalCommission": 3750 } }` |
-| `400` | Body isn't JSON | `{ "status": "fail", "data": { "message": "The request body must be JSON." } }` |
-| `400` | Body fails the schema | `{ "status": "fail", "data": { "message": "Some loan details aren't valid. Please check them and try again.", "issues": { "loanAmount": ["…"] } } }` |
-| `502` | **Any third-party failure**: API rejected the request, API key rejected, API error, unexpected API response, timeout or API unreachable | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }` |
-| `500` | **Our own fault**: anything the route didn't expect (an uncaught exception, E16) | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }` |
+| Status | When                                                                                                                                    | Body                                                                                                                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `201`  | Quote generated                                                                                                                         | `{ "status": "success", "data": { "quoteId": "…", "commissionRate": 0.015, "totalCommission": 3750 } }`                                              |
+| `400`  | Body isn't JSON                                                                                                                         | `{ "status": "fail", "data": { "message": "The request body must be JSON." } }`                                                                      |
+| `400`  | Body fails the schema                                                                                                                   | `{ "status": "fail", "data": { "message": "Some loan details aren't valid. Please check them and try again.", "issues": { "loanAmount": ["…"] } } }` |
+| `502`  | **Any third-party failure**: API rejected the request, API key rejected, API error, unexpected API response, timeout or API unreachable | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }`                                           |
+| `500`  | **Our own fault**: anything the route didn't expect (an uncaught exception, E16)                                                        | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }`                                           |
 
 `502` vs `500` tells monitoring and on-call whose problem it is: `502` means the vendor failed, `500` means we did. A deploy with `COMMISSION_QUOTE_API_KEY` unset never gets this far: the server refuses to start (E13).
 
@@ -219,32 +221,32 @@ Neither hop throws for an expected failure, so no error can escape unhandled. Th
 
 The route validates the input, then calls `postCommissionQuote()` (`src/features/commission-quote/vendor/commission-quote-api-client.ts`). The client logs the specific reason (`[commission-quote] Commission Quote API …`) and returns `null` for every vendor failure, which the route turns into the one `502` response.
 
-| Situation | Scenario | Server log (`[commission-quote] Commission Quote API …`) | App route returns |
-| --- | --- | --- | --- |
-| Quote returned | S1–S3 | nothing | `201` |
-| Input fails schema | E6 | nothing (the vendor isn't called) | `400` `fail` |
-| API returns `422` | E7 | `rejected the request (422 <code>: <message>)` | `502` `fail` |
-| API returns `401` | E8 | `rejected the API key (401 <code>: <message>)` | `502` `fail` |
-| API returns `5xx` | E9 | `failed (<status> <code>: <message>)` | `502` `fail` |
-| `201` body is not JSON or not a `CommissionQuote` | E10 | `returned a 201 that is not a CommissionQuote` | `502` `fail` |
-| Any other status | E10 | `returned an unexpected status <status>` | `502` `fail` |
-| API times out | E11 | `timed out after <timeoutMs> ms` | `502` `fail` |
-| API unreachable | E19 | `unreachable: <error> (<cause>)` | `502` `fail` |
-| Uncaught exception in the route | E16 | `[commission-quote] unexpected error` + the error | `500` `fail` |
+| Situation                                         | Scenario | Server log (`[commission-quote] Commission Quote API …`) | App route returns |
+| ------------------------------------------------- | -------- | -------------------------------------------------------- | ----------------- |
+| Quote returned                                    | S1–S3    | nothing                                                  | `201`             |
+| Input fails schema                                | E6       | nothing (the vendor isn't called)                        | `400` `fail`      |
+| API returns `422`                                 | E7       | `rejected the request (422 <code>: <message>)`           | `502` `fail`      |
+| API returns `401`                                 | E8       | `rejected the API key (401 <code>: <message>)`           | `502` `fail`      |
+| API returns `5xx`                                 | E9       | `failed (<status> <code>: <message>)`                    | `502` `fail`      |
+| `201` body is not JSON or not a `CommissionQuote` | E10      | `returned a 201 that is not a CommissionQuote`           | `502` `fail`      |
+| Any other status                                  | E10      | `returned an unexpected status <status>`                 | `502` `fail`      |
+| API times out                                     | E11      | `timed out after <timeoutMs> ms`                         | `502` `fail`      |
+| API unreachable                                   | E19      | `unreachable: <error> (<cause>)`                         | `502` `fail`      |
+| Uncaught exception in the route                   | E16      | `[commission-quote] unexpected error` + the error        | `500` `fail`      |
 
 ### Hop 1: UI → app route (browser)
 
 `generateCommissionQuoteAction()` (`src/features/commission-quote/generate-quote/generate-commission-quote-action.ts`) reads the body's `status` (not the HTTP code) and returns `{ status, data }` to the form for every response, or the lack of one. The form shows the quote, or `data.message` in the alert.
 
-| What the browser gets | Scenario | Action returns | Browser console | UI shows |
-| --- | --- | --- | --- | --- |
-| `{ status: 'success' }` with a valid `CommissionQuote` as `data` | S1–S3 | `{ status: 'success', data: quote }` | nothing | Result panel |
-| `{ status: 'fail' }` with `502` / `500` | E7–E11, E16, E19 | the route's `fail`, unchanged | `<status> <message>` | `data.message` (the generic error) |
-| `{ status: 'fail' }` with `400` (only if form and server rules are out of step, e.g. an old tab during a deploy) | E6 | the route's `fail`, unchanged | `400 <message>` | "Some loan details aren't valid. Please check them and try again." |
-| Not a `{ status, data }` body (e.g. an HTML error page or non-JSON), or `success` without a valid quote | E17 | generic `fail` | `<status> reply is not a valid { status, data }` | Generic error |
-| No answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` | E15 | generic `fail` | `no answer within 10000 ms` | Generic error |
-| `fetch` throws a network error | E12 | generic `fail` | `network error: <message>` | Generic error |
-| The unmount signal fired (checked first) | E18 | generic `fail` | nothing | Nothing (the form checks its own signal; no state update) |
+| What the browser gets                                                                                            | Scenario         | Action returns                       | Browser console                                  | UI shows                                                           |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `{ status: 'success' }` with a valid `CommissionQuote` as `data`                                                 | S1–S3            | `{ status: 'success', data: quote }` | nothing                                          | Result panel                                                       |
+| `{ status: 'fail' }` with `502` / `500`                                                                          | E7–E11, E16, E19 | the route's `fail`, unchanged        | `<status> <message>`                             | `data.message` (the generic error)                                 |
+| `{ status: 'fail' }` with `400` (only if form and server rules are out of step, e.g. an old tab during a deploy) | E6               | the route's `fail`, unchanged        | `400 <message>`                                  | "Some loan details aren't valid. Please check them and try again." |
+| Not a `{ status, data }` body (e.g. an HTML error page or non-JSON), or `success` without a valid quote          | E17              | generic `fail`                       | `<status> reply is not a valid { status, data }` | Generic error                                                      |
+| No answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS`                                                             | E15              | generic `fail`                       | `no answer within 10000 ms`                      | Generic error                                                      |
+| `fetch` throws a network error                                                                                   | E12              | generic `fail`                       | `network error: <message>`                       | Generic error                                                      |
+| The unmount signal fired (checked first)                                                                         | E18              | generic `fail`                       | nothing                                          | Nothing (the form checks its own signal; no state update)          |
 
 The API key, the API URL, stack traces and anything the Commission Quote API returns in an error are never sent to the browser.
 
@@ -262,13 +264,14 @@ Invalid Commission Quote API configuration:
 
 Each problem reads `"<VARIABLE>: <rule>"`, and **values are never included**, so the API key can't end up in a log. The config is read on every call (cheap), so tests can pass their own env object.
 
-| Variable                          | Rule                                                                                 | Local default                                |
-| --------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
-| `COMMISSION_QUOTE_API_BASE_URL`   | `http` or `https` URL (`localhost` allowed). A trailing `/` is removed.              | `http://localhost:4010/commission-quote-api` |
-| `COMMISSION_QUOTE_API_KEY`        | Not empty after trimming                                                             | `local-dev-key`                              |
+| Variable                          | Rule                                                                                                 | Local default                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `COMMISSION_QUOTE_API_BASE_URL`   | `http` or `https` URL (`localhost` allowed). A trailing `/` is removed.                              | `http://localhost:4010/commission-quote-api`     |
+| `COMMISSION_QUOTE_API_KEY`        | Not empty after trimming                                                                             | `local-dev-key`                                  |
 | `COMMISSION_QUOTE_API_TIMEOUT_MS` | Optional; empty counts as unset. Whole number from 1 to `COMMISSION_QUOTE_API_TIMEOUT_MAX_MS` (9000) | `COMMISSION_QUOTE_API_TIMEOUT_DEFAULT_MS` (5000) |
 
-The browser-side timeout is **not** an env variable: `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (`10000`) is exported from `generate-commission-quote-action.ts`, the browser code that uses it. That file is client-safe, so the server config can import it too. The server-side constants are local to `commission-quote-api-config.ts`, the only file that uses them:
+The browser-side timeout is **not** an env variable: `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (`10000`) lives in `model.ts`, which is client-safe and imported by both the browser action and the server config. That way the vendor config (`vendor/`) doesn't depend on a UI module. The server-side constants are local to `commission-quote-api-config.ts`, the only file that uses them:
+
 - `COMMISSION_QUOTE_API_TIMEOUT_DEFAULT_MS` (`5000`);
 - `COMMISSION_QUOTE_API_TIMEOUT_MAX_MS` (`GENERATE_QUOTE_REQUEST_TIMEOUT_MS − 1000`), worked out from the browser constant so the two can't drift apart.
 
@@ -282,46 +285,62 @@ Location: `mock-api/commission-quote-api/`, served by `mock-api/server.mjs` unde
 
 Its settings are constants at the top of `server.mjs`. It reads no environment variables, so changing one means editing the file and restarting:
 
-| Constant | Value | Meaning |
-|---|---|---|
-| `PORT` | `4010` | Port to listen on |
-| `ERROR_RATE` | `0.2` | Share of requests that fail at random, from `0` (never) to `1` (always) |
-| `TIMEOUT_DELAY_MS` | `10000` | How long the "timeout" error waits before closing the connection |
+| Constant           | Value           | Meaning                                                                 |
+| ------------------ | --------------- | ----------------------------------------------------------------------- |
+| `PORT`             | `4010`          | Port to listen on                                                       |
+| `ERROR_RATE`       | `0.2`           | Share of requests that fail at random, from `0` (never) to `1` (always) |
+| `TIMEOUT_DELAY_MS` | `10000`         | How long the "timeout" error waits before closing the connection        |
+| `API_KEY`          | `local-dev-key` | The only `x-api-key` accepted; matches `.env.example`                   |
 
 `server.mjs` is kept deliberately small (about 90 lines, Node built-ins only), because it is a local stand-in, not production code. It doesn't check fixtures at startup. A typo shows up as a wrong response or a crash in the `[mock]` output.
 
-**API key:** the mock checks that an `x-api-key` header is present **and** has a value. A missing header, an empty value or whitespace only gets `401`. Any other value is accepted, so it rejects requests without a key but not requests with a wrong key. The app's handling of a rejected key (E8) is tested with a stubbed `fetch` in the API client's unit tests, not against the mock.
+**API key:** the mock accepts only `x-api-key: local-dev-key` (`API_KEY`), the key in `.env.example`. A missing header or any other value gets `401` (E8): the app logs "rejected the API key" and the browser gets the generic `502`. Playwright gives the app the same key.
 
-The mock returns **pre-configured JSON only**. It does not calculate anything, so `totalCommission` is a fixed value per risk band whatever loan amount is entered.
+The mock returns **pre-configured JSON**, with one calculation. Each quote response in `scenarios.json` declares `"commissionOf": "loanAmount"`, so the mock takes `commissionRate` from the band's fixture and sets `totalCommission = loanAmount × commissionRate`, rounded to cents (e.g. $10,000 at MEDIUM → `150`). The rate depends only on the risk band; the loan term is ignored. If `loanAmount` isn't a positive number, the mock returns the `422` fallback.
 
 ### Scenarios
 
 Rules live in `scenarios.json` and are checked in order:
 
-| #   | Request                                                                                                 | Response                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `x-api-key` header missing or empty (any non-empty value is accepted)                                   | `401` `unauthorized.json`                                                                                                 |
-| 2   | `loanAmount` equals `13` (`forceError` in `scenarios.json`)                                             | **One error picked at random** from the error pool below. A deterministic way to get _an_ error, for demos.               |
-| 3   | **Any other request, at random**, with probability `ERROR_RATE` (`0.2`, i.e. about 1 in 5)              | **One error picked at random** from the error pool below                                                                  |
-| 4   | `riskBand` = `LOW`                                                                                      | `201` `quote-low.json`                                                                                                    |
-| 5   | `riskBand` = `MEDIUM`                                                                                   | `201` `quote-medium.json`                                                                                                 |
-| 6   | `riskBand` = `HIGH`                                                                                     | `201` `quote-high.json`                                                                                                   |
-| 7   | Anything else: body isn't JSON, or matches no response (e.g. `riskBand` = `EXTREME`)                     | `422` `validation-error.json` (`fallback`)                                                                                |
+| #   | Request                                                                                                                    | Response                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 1   | `x-api-key` header missing or not `local-dev-key` (E8)                                                                     | `401` `unauthorized.json`                                                                                   |
+| 2   | `loanAmount` equals `13` (`forceError` in `scenarios.json`)                                                                | **One error picked at random** from the error pool below. A deterministic way to get _an_ error, for demos. |
+| 3   | **Any other request, at random**, with probability `ERROR_RATE` (`0.2`, i.e. about 1 in 5)                                 | **One error picked at random** from the error pool below                                                    |
+| 4   | `riskBand` = `LOW`                                                                                                         | `201` `quote-low.json`, `totalCommission` = `loanAmount` × `0.01`                                           |
+| 5   | `riskBand` = `MEDIUM`                                                                                                      | `201` `quote-medium.json`, `totalCommission` = `loanAmount` × `0.015`                                       |
+| 6   | `riskBand` = `HIGH`                                                                                                        | `201` `quote-high.json`, `totalCommission` = `loanAmount` × `0.02`                                          |
+| 7   | Anything else: body isn't JSON, matches no response (e.g. `riskBand` = `EXTREME`), or `loanAmount` isn't a positive number | `422` `validation-error.json` (`fallback`)                                                                  |
 
 A request whose method and path match no route gets `404`.
 
-`scenarios.json` declares everything, so `server.mjs` holds no API-specific logic or validation:
+`scenarios.json` declares everything, so `server.mjs` holds no API-specific logic. Its only calculation is the generic `commissionOf` rule above:
 
 ```json
 {
-  "routes": [{
-    "method": "POST", "path": "/commission-quotes",
-    "auth": { "header": "x-api-key", "status": 401, "fixture": "unauthorized.json" },
-    "forceError": { "field": "loanAmount", "equals": 13 },
-    "errorPool": [{ "name": "server-error", "status": 500, "fixture": "server-error.json" }, { "name": "timeout", "behaviour": "timeout" }, "…"],
-    "responses": [{ "when": { "riskBand": "LOW" }, "status": 201, "fixture": "quote-low.json" }, "…"],
-    "fallback": { "status": 422, "fixture": "validation-error.json" }
-  }]
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/commission-quotes",
+      "auth": { "header": "x-api-key", "status": 401, "fixture": "unauthorized.json" },
+      "forceError": { "field": "loanAmount", "equals": 13 },
+      "errorPool": [
+        { "name": "server-error", "status": 500, "fixture": "server-error.json" },
+        { "name": "timeout", "behaviour": "timeout" },
+        "…"
+      ],
+      "responses": [
+        {
+          "when": { "riskBand": "LOW" },
+          "status": 201,
+          "fixture": "quote-low.json",
+          "commissionOf": "loanAmount"
+        },
+        "…"
+      ],
+      "fallback": { "status": 422, "fixture": "validation-error.json" }
+    }
+  ]
 }
 ```
 
@@ -343,7 +362,7 @@ Rule 3 is the real simulation of network conditions. Any valid request can fail 
 - The mock prints the error it picked and why to its terminal, e.g. `[mock] random failure (rate 0.2) → 503 service-unavailable` or `[mock] forced (loanAmount 13) → 422 validation-error`, so you can see what happened behind the generic message.
 - Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user sees. Tests that need one specific error stub `fetch` in unit tests instead (see below).
 
-Example fixture values:
+Example fixture values. `totalCommission` in the files is the value for a $250,000 loan; the mock replaces it with the calculated total:
 
 | Fixture             | `quoteId`     | `commissionRate` | `totalCommission` |
 | ------------------- | ------------- | ---------------- | ----------------- |
@@ -393,17 +412,17 @@ mock-api/
 
 ## 10. Tests
 
-| Layer              | File                                                 | Covers                                                                                                                                                                                                                                                                                                                              | Scenarios                  |
-| ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Model              | `model.test.ts`                                      | Each field required; amount > 0, ≤ 100,000,000 and at most 2 decimals (`0.29` and `0.1 + 0.2` accepted, `0.001` and `1e300` rejected); term is a whole number from 1 to 600; risk band limited to the three values                                                                                                                  | E1–E4, E20, E21 rules      |
-| Config             | `commission-quote-api-config.test.ts`                | Missing or invalid values throw one error naming every bad variable (never a value); timeout default applied; timeout `9000` accepted, `9001` and `15000` rejected                                                                                                                                                                  | E13                        |
-| API client (hop 2) | `commission-quote-api-client.test.ts`                | Sends `x-api-key`; returns the quote for a valid 201 without logging; 401, 422, 5xx, non-JSON or invalid 201, unexpected status, timeout and network error each return `null` **and log their own reason**; never logs the API key; never throws | S1, E7–E11, E19            |
-| App route          | `route.test.ts`                                      | a quote → `201`; invalid, non-JSON or non-object body → `400` without calling the client, only contract fields passed to it; the client returning `null` → `502` with the generic body; a thrown exception → `500` `fail`; no upstream detail or stack trace in any body                                                                                                                      | E6–E11, E16, E19           |
-| Request (hop 1)    | `generate-commission-quote-action.test.ts`                   | Returns `{ status, data }`: success passes the quote through; a route `fail` (400/500/502) passes through with its message; HTML, non-JSON, a bare quote or `success` without a quote → generic `fail`; network error and (fake-timer) timeout → generic `fail`; each failure logs its reason, a successful quote and an unmount log nothing; unmount wins when both fired; timer cleared after a response; never throws | E6, E12, E15–E18           |
-| Formatting         | `format.test.ts`                                     | `0.015` → `1.50%`; `3750` → `$3,750.00`                                                                                                                                                                                                                                                                                             | S1                         |
-| Form (browser)     | `commission-quote-form.browser.test.tsx`             | Generate disabled until valid; field errors after touch; no double submit; every failure kind shows the generic error; no message after unmount; alert cleared on retry; new result replaces old                                                                                                                 | S3, E1–E5, E12, E14–E18, E20, E21 |
-| Result (browser)   | `commission-quote-result.browser.test.tsx`           | Shows quote ID, formatted rate and total                                                                                                                                                                                                                                                                                            | S1                         |
-| End to end         | `page.e2e.ts`                                        | **One happy path only**: fill in the form, click Generate, see a quote. Every other scenario is covered by the unit and browser tests above | S1 |
+| Layer              | File                                       | Covers                                                                                                                                                                                                                                                                                                                                                                                                                   | Scenarios                         |
+| ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| Model              | `model.test.ts`                            | Each field required; amount > 0, ≤ 100,000,000 and at most 2 decimals (`0.29` and `0.1 + 0.2` accepted, `0.001` and `1e300` rejected); term is a whole number from 1 to 600; risk band limited to the three values                                                                                                                                                                                                       | E1–E4, E20, E21 rules             |
+| Config             | `commission-quote-api-config.test.ts`      | Missing or invalid values throw one error naming every bad variable (never a value); timeout default applied; timeout `9000` accepted, `9001` and `15000` rejected                                                                                                                                                                                                                                                       | E13                               |
+| API client (hop 2) | `commission-quote-api-client.test.ts`      | Sends `x-api-key`; returns the quote for a valid 201 without logging; 401, 422, 5xx, non-JSON or invalid 201, unexpected status, timeout and network error each return `null` **and log their own reason**; never logs the API key; never throws                                                                                                                                                                         | S1, E7–E11, E19                   |
+| App route          | `route.test.ts`                            | a quote → `201`; invalid, non-JSON or non-object body → `400` without calling the client, only contract fields passed to it; the client returning `null` → `502` with the generic body; a thrown exception → `500` `fail`; no upstream detail or stack trace in any body                                                                                                                                                 | E6–E11, E16, E19                  |
+| Request (hop 1)    | `generate-commission-quote-action.test.ts` | Returns `{ status, data }`: success passes the quote through; a route `fail` (400/500/502) passes through with its message; HTML, non-JSON, a bare quote or `success` without a quote → generic `fail`; network error and (fake-timer) timeout → generic `fail`; each failure logs its reason, a successful quote and an unmount log nothing; unmount wins when both fired; timer cleared after a response; never throws | E6, E12, E15–E18                  |
+| Formatting         | `format.test.ts`                           | `0.015` → `1.50%`; `3750` → `$3,750.00`                                                                                                                                                                                                                                                                                                                                                                                  | S1                                |
+| Form (browser)     | `commission-quote-form.browser.test.tsx`   | Generate stays enabled; clicking it with missing or invalid input shows every error, focuses the first and sends nothing; no errors before the first click; errors clear as values become valid; no double submit; every failure kind shows the generic error; no message after unmount; alert cleared on retry; any field change clears the shown quote; new result replaces old                                        | S3, E1–E5, E12, E14–E18, E20, E21 |
+| Result (browser)   | `commission-quote-result.browser.test.tsx` | Shows quote ID, formatted rate and total                                                                                                                                                                                                                                                                                                                                                                                 | S1                                |
+| End to end         | `page.e2e.ts`                              | **One happy path only**: fill in the form, click Generate, see a quote. Every other scenario is covered by the unit and browser tests above                                                                                                                                                                                                                                                                              | S1                                |
 
 Playwright starts the mock and the app (production build) itself. Because the mock fails about 1 in 5 requests at random, Playwright retries a failed test up to 2 times. The chance that the happy path fails three times in a row by bad luck is under 1%.
 

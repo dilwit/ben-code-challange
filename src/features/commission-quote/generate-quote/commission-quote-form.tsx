@@ -47,11 +47,14 @@ export default function CommissionQuoteForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<FormValues, unknown, CommissionQuoteRequest>({
     resolver: zodResolver(commissionQuoteFormSchema),
-    // Show a field's error once the user has left it, then update it as they type.
-    mode: 'onTouched',
+    // Errors first appear when Generate is clicked (all at once, focus on the first), then update
+    // as the user types. Not on leaving a field: an error appearing then pushes the button down
+    // mid-click, and the click is lost.
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
     defaultValues: { loanAmount: '', loanTermInMonths: '', riskBand: '' },
   })
 
@@ -68,7 +71,8 @@ export default function CommissionQuoteForm() {
     return () => controller.abort()
   }, [])
 
-  // handleSubmit only calls this when the form is valid.
+  // handleSubmit only calls this when the form is valid. Otherwise it shows every field's error
+  // and moves focus to the first one, so nothing is sent (E1).
   const onGenerate = async (request: CommissionQuoteRequest) => {
     setIsGenerating(true) // disables the fields and Generate, which reads "Generating…" (E5)
     setGenerationError(null) // a retry clears the previous error (E14)
@@ -85,8 +89,15 @@ export default function CommissionQuoteForm() {
 
   return (
     <>
-      {/* handleSubmit is called on submit, not during render: onGenerate reads a ref. */}
-      <form noValidate onSubmit={(event) => handleSubmit(onGenerate)(event)} className="mt-6">
+      {/* handleSubmit is called on submit, not during render: onGenerate reads a ref.
+          onChange: any edit to a field clears the shown quote, so a quote on screen always
+          matches the form and can't be copied for the wrong loan. */}
+      <form
+        noValidate
+        onSubmit={(event) => handleSubmit(onGenerate)(event)}
+        onChange={() => setQuote(null)}
+        className="mt-6"
+      >
         {/* Disabled while generating, so the values can't change mid-request. */}
         <fieldset disabled={isGenerating} className="space-y-5">
           <Field id="loanAmount" label="Loan amount ($)" error={errors.loanAmount?.message}>
@@ -138,9 +149,11 @@ export default function CommissionQuoteForm() {
             </select>
           </Field>
 
+          {/* Not disabled for invalid input: clicking it explains what's missing. A disabled
+              button can't be focused and gives no reason. Disabled only while generating. */}
           <button
             type="submit"
-            disabled={!isValid || isGenerating}
+            disabled={isGenerating}
             className="rounded-md bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-600/50 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {isGenerating ? 'Generating…' : 'Generate quote'}

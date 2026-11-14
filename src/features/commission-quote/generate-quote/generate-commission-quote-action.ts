@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import type { ApiResponse } from '@/shared/lib/api-response'
-import { commissionQuoteSchema, type CommissionQuote, type CommissionQuoteRequest } from '../model'
+import {
+  commissionQuoteSchema,
+  GENERATE_QUOTE_REQUEST_TIMEOUT_MS,
+  type CommissionQuote,
+  type CommissionQuoteRequest,
+} from '../model'
 
 // Browser side (doc 02, sections 3 and 6): sends the form data to our own app route,
 // POST /api/commission-quotes, and returns the same { status, data } shape the route uses.
@@ -9,12 +14,6 @@ import { commissionQuoteSchema, type CommissionQuote, type CommissionQuoteReques
 //
 // Despite the name, this is a plain client-side function calling an HTTP route, not a
 // Next.js Server Action ('use server').
-
-/**
- * How long the browser waits for the app route (E15). Exported because the server config works
- * out its own maximum from it: the server must give up before the browser does.
- */
-export const GENERATE_QUOTE_REQUEST_TIMEOUT_MS = 10_000
 
 const GENERIC_FAIL = {
   status: 'fail',

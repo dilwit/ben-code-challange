@@ -56,24 +56,47 @@ afterEach(() => {
 })
 
 describe('CommissionQuoteForm', () => {
-  it('keeps Generate disabled until every field is valid (E1)', async () => {
-    const { amount, term, riskBand, generate } = await renderForm()
-    await expect.element(generate).toBeDisabled()
-
-    await amount.fill('250000')
-    await term.fill('360')
-    await expect.element(generate).toBeDisabled()
-
-    await riskBand.selectOptions('MEDIUM')
+  it('keeps Generate enabled before anything is filled in, so it can explain what is missing', async () => {
+    const { generate } = await renderForm()
     await expect.element(generate).toBeEnabled()
-
-    // Back to invalid: disabled again.
-    await amount.fill('0')
-    await expect.element(generate).toBeDisabled()
   })
 
-  it('shows no errors before a field is touched', async () => {
+  it('shows every missing field, focuses the first and sends nothing when Generate is clicked (E1)', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { amount, term, riskBand, generate } = await renderForm()
+    await generate.click()
+
+    await expect.element(amount).toHaveAccessibleDescription('Enter a loan amount greater than 0')
+    await expect
+      .element(term)
+      .toHaveAccessibleDescription('Enter a loan term in whole months from 1 to 600')
+    await expect.element(riskBand).toHaveAccessibleDescription('Select a risk band')
+    await expect.element(amount).toHaveFocus()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('shows and focuses the one invalid field when Generate is clicked, and sends nothing (E3)', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { amount, term, riskBand, generate } = await renderForm()
+    await amount.fill('250000')
+    await term.fill('601')
+    await riskBand.selectOptions('MEDIUM')
+    await generate.click()
+
+    await expect
+      .element(term)
+      .toHaveAccessibleDescription('Enter a loan term in whole months from 1 to 600')
+    await expect.element(term).toHaveFocus()
+    await expect.element(amount).not.toHaveAttribute('aria-invalid')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('shows no errors before Generate is clicked, even after leaving an invalid field', async () => {
     const { amount, term, riskBand } = await renderForm()
+    await amount.fill('0')
+    await userEvent.tab()
     for (const field of [amount, term, riskBand]) {
       await expect.element(field).not.toHaveAttribute('aria-invalid')
       await expect.element(field).not.toHaveAccessibleDescription()
@@ -88,12 +111,12 @@ describe('CommissionQuoteForm', () => {
     ['0.001', 'Enter a loan amount with no more than 2 decimal places'],
     ['100000000.01', 'Enter a loan amount up to $100,000,000'],
   ])(
-    'shows an error for loan amount %j once the field is left (E2, E20, E21)',
+    'shows an error for loan amount %j when Generate is clicked (E2, E20, E21)',
     async (value, message) => {
-      const { screen, amount } = await renderForm()
-      await amount.click()
+      vi.stubGlobal('fetch', vi.fn())
+      const { screen, amount, generate } = await renderForm()
       if (value) await amount.fill(value)
-      await userEvent.tab()
+      await generate.click()
 
       await expect.element(screen.getByText(message)).toBeVisible()
       await expect.element(amount).toHaveAttribute('aria-invalid', 'true')
@@ -102,12 +125,12 @@ describe('CommissionQuoteForm', () => {
   )
 
   it.each(['', '0', '1.5', '601'])(
-    'shows an error for loan term %j once the field is left (E3)',
+    'shows an error for loan term %j when Generate is clicked (E3)',
     async (value) => {
-      const { screen, term } = await renderForm()
-      await term.click()
+      vi.stubGlobal('fetch', vi.fn())
+      const { screen, term, generate } = await renderForm()
       if (value) await term.fill(value)
-      await userEvent.tab()
+      await generate.click()
 
       await expect
         .element(screen.getByText('Enter a loan term in whole months from 1 to 600'))
@@ -115,20 +138,21 @@ describe('CommissionQuoteForm', () => {
     },
   )
 
-  it('shows an error when the risk band is left empty (E4)', async () => {
-    const { riskBand } = await renderForm()
-    await riskBand.click()
-    await userEvent.tab()
+  it('shows an error when Generate is clicked without a risk band (E4)', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    const { riskBand, generate } = await renderForm()
+    await generate.click()
 
     // Checked through the select itself: the placeholder option has the same text as the error.
     await expect.element(riskBand).toHaveAttribute('aria-invalid', 'true')
     await expect.element(riskBand).toHaveAccessibleDescription('Select a risk band')
   })
 
-  it('clears an error as soon as the value becomes valid', async () => {
-    const { screen, amount } = await renderForm()
+  it('after Generate, clears an error as soon as the value becomes valid', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    const { screen, amount, generate } = await renderForm()
     await amount.fill('0')
-    await userEvent.tab()
+    await generate.click()
     await expect.element(screen.getByText('Enter a loan amount greater than 0')).toBeVisible()
 
     await amount.fill('250000')
@@ -260,9 +284,28 @@ describe('CommissionQuoteForm', () => {
       await expect.element(screen.getByText('Q-LOW-0001')).toBeVisible()
 
       await riskBand.selectOptions('HIGH')
+      // The old quote no longer matches the form, so it's gone before Generate is clicked again.
+      await expect.element(screen.getByText('Q-LOW-0001')).not.toBeInTheDocument()
+
       await generate.click()
       await expect.element(screen.getByText('Q-HIGH-0001')).toBeVisible()
+    })
+
+    it('clears the shown quote as soon as any value changes, so it never mismatches the form', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => reply(201, success(lowQuote))),
+      )
+      const { screen, amount, generate, fillValid } = await renderForm()
+      await fillValid('LOW')
+      await generate.click()
+      await expect.element(screen.getByText('Q-LOW-0001')).toBeVisible()
+
+      await amount.fill('300000')
       await expect.element(screen.getByText('Q-LOW-0001')).not.toBeInTheDocument()
+      await expect
+        .element(screen.getByRole('region', { name: 'Commission quote' }))
+        .not.toBeInTheDocument()
     })
   })
 })

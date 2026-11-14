@@ -1,5 +1,5 @@
 import 'server-only'
-import { GENERATE_QUOTE_REQUEST_TIMEOUT_MS } from '../generate-quote/generate-commission-quote-action'
+import { GENERATE_QUOTE_REQUEST_TIMEOUT_MS } from '../model'
 
 // Settings for calling the Commission Quote API (doc 02, section 7). Read only on the server;
 // the build fails if client code imports this file. src/instrumentation.ts calls this once at

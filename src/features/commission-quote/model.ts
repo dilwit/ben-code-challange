@@ -1,11 +1,18 @@
 import { z } from 'zod'
 
 // Data model for Generate Commission Quote (doc 02, section 2).
-// One source of truth for the form, the app route, the API client and the mock fixtures.
+// One source of truth for the form, the app route and the API client. Client-safe, so both
+// browser and server code import it.
 
 // Sanity ceilings, not business rules: they keep absurd values away from the vendor.
 export const LOAN_AMOUNT_MAX = 100_000_000
 export const LOAN_TERM_MAX_MONTHS = 600
+
+/**
+ * How long the browser waits for the app route (E15). The server's own timeout for the vendor is
+ * kept below it (vendor/commission-quote-api-config.ts), so the server always gives up first.
+ */
+export const GENERATE_QUOTE_REQUEST_TIMEOUT_MS = 10_000
 
 export const RISK_BANDS = ['LOW', 'MEDIUM', 'HIGH'] as const
 
