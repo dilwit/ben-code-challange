@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn -E \"result\\\\.ts|Result type|err\\\\\\(|ok\\\\\\(|\\\\`unavailable\\\\`\" docs src)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm build *)"
+    ]
+  }
+}

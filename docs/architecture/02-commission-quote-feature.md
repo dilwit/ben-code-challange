@@ -48,7 +48,7 @@ All errors below are shown in an alert, and the form keeps its values so the use
 | --- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | E12 | Network error                          | The browser can't reach `/api/commission-quotes` (offline, DNS failure, connection dropped)                                                                                | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                                                                      |
 | E15 | App route too slow                     | The app route doesn't answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (10 seconds)                                                                                       | The user clicks **Generate**                 | The request is aborted and the **generic error** is shown; details are logged to the browser console                                                                 |
-| E16 | App route crashes                      | The app route throws an unexpected exception                                                                                                                               | The user clicks **Generate**                 | The route catches it and returns `500` `INTERNAL_ERROR`; the server logs the stack trace; the **generic error** is shown |
+| E16 | App route crashes                      | The app route throws an unexpected exception                                                                                                                               | The user clicks **Generate**                 | The route catches it and returns `500` `fail`; the server logs the stack trace; the **generic error** is shown |
 | E17 | Unexpected response from the app route | The response isn't JSON (e.g. an HTML error page), has a status the UI doesn't expect (e.g. `404`, `405`, `413`), or is a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**                 | The **generic error** is shown; details are logged to the browser console                                                |
 | E18 | User leaves during a request           | A request is in progress                                                                                                                                                   | The user navigates away or the form unmounts | The request is aborted; no error is shown                                                                                |
 
@@ -63,7 +63,7 @@ All errors below are shown in an alert, and the form keeps its values so the use
 | E10 | Unexpected response                   | The Commission Quote API returns a non-JSON body, an unexpected status, or a `201` whose body doesn't match `CommissionQuote` | The user clicks **Generate**             | The **generic error** is shown; the server logs the mismatch                                                                                                                                   |
 | E11 | Quote service too slow                | The Commission Quote API doesn't answer within `COMMISSION_QUOTE_API_TIMEOUT_MS`                                              | The user clicks **Generate**             | The **generic error** is shown; the server logs the timeout                                                                                                                                    |
 | E19 | Quote service unreachable             | The app route can't connect to the Commission Quote API (connection refused, DNS failure, mock not running)                   | The user clicks **Generate**             | The **generic error** is shown; the server logs the network error                                                                                                                              |
-| E13 | Missing configuration                 | `COMMISSION_QUOTE_API_BASE_URL`, `COMMISSION_QUOTE_API_KEY` or `COMMISSION_QUOTE_API_TIMEOUT_MS` is missing or invalid        | The app route handles a request          | The route returns `500` `INTERNAL_ERROR` (our fault, not the vendor's) and the Commission Quote API is **not** called; the **generic error** is shown; the server logs which variable is wrong |
+| E13 | Missing configuration                 | `COMMISSION_QUOTE_API_BASE_URL`, `COMMISSION_QUOTE_API_KEY` or `COMMISSION_QUOTE_API_TIMEOUT_MS` is missing or invalid        | The server starts                        | The server **refuses to start**: it prints every invalid variable (never a value) and exits with code 1, so nothing is served. Checked once in `src/instrumentation.ts` (see section 7) |
 
 **Recovery**
 
@@ -75,8 +75,8 @@ All errors below are shown in an alert, and the form keeps its values so the use
 
 | Message            | Text                                                         | Used for                   |
 | ------------------ | ------------------------------------------------------------ | -------------------------- |
-| Generic error      | "We couldn't generate a quote right now. Please try again."  | E7–E13, E15–E17, E19       |
-| Field errors       | Shown under each field (see E2–E4, E20, E21)                 | E2–E4, E6, E20, E21        |
+| Generic error      | "We couldn't generate a quote right now. Please try again."  | E7–E12, E15–E17, E19       |
+| Field errors       | Shown under each field by the form's own validation       | E2–E4, E20, E21            |
 
 Every failure after the request is sent, on either hop, shows the same generic error. The user can only do one thing in every case (try again), so separate messages would add UI states without helping them. The specific cause is still logged: hop 1 to the browser console, hop 2 on the server.
 
@@ -87,11 +87,11 @@ COMMISSION_QUOTE_API_TIMEOUT_MS (server → API)  5 s   (max 9 s, enforced)
 GENERATE_QUOTE_REQUEST_TIMEOUT_MS (browser → app route)  10 s
 ```
 
-The ordering is **enforced**, not just documented. The config schema rejects a `COMMISSION_QUOTE_API_TIMEOUT_MS` above `GENERATE_QUOTE_REQUEST_TIMEOUT_MS − 1000`. The 1 s margin covers the route's own overhead. A value out of range is a misconfiguration (E13), so the server can never keep waiting after the browser has stopped (see section 7).
+The ordering is **enforced**, not just documented. The config check rejects a `COMMISSION_QUOTE_API_TIMEOUT_MS` above `GENERATE_QUOTE_REQUEST_TIMEOUT_MS − 1000`. The 1 s margin covers the route's own overhead. A value out of range stops the server from starting (E13), so it can never keep waiting after the browser has stopped (see section 7).
 
 ## 2. Data model
 
-Defined once in `src/features/commission-quote/model.ts` (Zod schemas + inferred TypeScript types). Used by the form, the app route, the API client and the mock fixture contract test.
+Defined once in `src/features/commission-quote/model.ts` (Zod schemas + inferred TypeScript types). Used by the form, the app route, the API client and the browser action.
 
 ### `CommissionQuoteRequest`
 
@@ -130,8 +130,8 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 
 | Field       | Control                                                | Notes                                        |
 | ----------- | ------------------------------------------------------ | -------------------------------------------- |
-| Loan amount | Number input, label "Loan amount ($)"                  | Empty means missing                          |
-| Loan term   | Number input, label "Loan term (months)"               | Whole numbers only                           |
+| Loan amount | Text input, `inputMode="decimal"`, label "Loan amount ($)" | Empty means missing                      |
+| Loan term   | Text input, `inputMode="numeric"`, label "Loan term (months)" | Whole numbers only                    |
 | Risk band   | Select, label "Risk band", options Low / Medium / High | No default; placeholder "Select a risk band" |
 
 ### Behaviour
@@ -140,28 +140,34 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Incomplete or invalid input** | **Generate** is disabled until every field is **valid**, not just filled in. A field shows its error once it has been touched (e.g. "Enter a loan amount greater than 0"). |
 | **Valid input**                 | **Generate** is enabled.                                                                                                                                                   |
-| **Submitting**                  | Button shows "Generating…" and is disabled; fields are read-only.                                                                                                          |
+| **Submitting**                  | Button shows "Generating…" and is disabled; the fields are disabled too (one `<fieldset disabled>`), so the values can't change mid-request.                                                                                                          |
 | **Success**                     | Result panel shows Quote ID, Commission rate (`1.50%`) and Total commission (`$3,750.00`). The form stays filled in so the user can change a value and generate again.     |
 | **Error**                       | An alert shows the generic error. The form stays filled in so the user can retry.                                  |
 
-- Validation in the form uses the same `CommissionQuoteRequest` schema as the server.
-- The form never calls `fetch` directly. It calls `requestCommissionQuote(input, { signal })` (`generate-quote/request-commission-quote.ts`, client-safe), which:
+- **React Hook Form** runs the validation, through `zodResolver`, with `mode: 'onTouched'`: a field shows its error once the user has left it, then updates as they type. Generate is `disabled` until `formState.isValid`.
+- The rules and messages are the **same `commissionQuoteRequestSchema` as the server** (`model.ts`). The form only adds a text-to-value step in front of each field, `z.string().transform(...).pipe(shape.<field>)`:
+  - **An empty field counts as missing, not `0`.** `Number('')` is `0`, which would show "greater than 0" for a field the user hasn't filled in. Any other text goes through `Number()`, so `abc` is rejected as not a number.
+  - The risk band's empty placeholder (`""`) counts as missing.
+  - The form's value type (all strings) is inferred with `z.input<…>`, and the submitted data is a `CommissionQuoteRequest`.
+- **Text inputs with `inputMode`, not `type="number"`:** a number input blanks text the browser can't read (`abc`, `1,000`), so the form couldn't tell it from an empty field, and it accepts `e`. A text input keeps exactly what was typed, while `inputMode` still brings up the number keyboard on phones.
+- **Accessibility:** each field has a `<label>`. Its error is linked with `aria-describedby`, and the field gets `aria-invalid` while it has one.
+- The form never calls `fetch` directly. It calls `generateCommissionQuoteAction(input, { signal })` (`generate-quote/generate-commission-quote-action.ts`, client-safe; a plain browser function calling the app route, **not** a Next.js Server Action), which:
   - sends `POST /api/commission-quotes`, aborting on **either** of two separate signals (see _Timeout vs unmount_ below);
   - catches **every** failure, including network errors, timeouts, non-JSON bodies, unexpected statuses and bodies that fail the `CommissionQuote` schema;
-  - returns a `Result`, so the form only has to map a known kind to a message (see section 6) and never sees an exception.
+  - returns the **same `{ status, data }` shape as the route** (`ApiResponse<CommissionQuote>`), so the form only checks `status`: `success` shows the quote, `fail` shows `data.message` in the alert. Its own failures (timeout, network error, a reply it can't read) become a `fail` with the generic message, and the reason is logged to the browser console. It never throws.
 
 **Timeout vs unmount.** Both cases make `fetch` reject with an `AbortError`, but E15 must show the generic error and E18 must show nothing. So each case gets its own signal, and the function checks which one fired:
 
 1. **Unmount signal:** the form owns an `AbortController`, aborts it in its effect cleanup and passes `controller.signal` in.
-2. **Timeout signal:** `requestCommissionQuote()` creates its own `AbortController` and aborts it with `setTimeout(…, GENERATE_QUOTE_REQUEST_TIMEOUT_MS)`. The timer is cleared in `finally`. It is built on `setTimeout` on purpose, **not** `AbortSignal.timeout()`, so Vitest's fake timers can control it (see section 10).
+2. **Timeout signal:** `generateCommissionQuoteAction()` creates its own `AbortController` and aborts it with `setTimeout(…, GENERATE_QUOTE_REQUEST_TIMEOUT_MS)`. The timer is cleared in `finally`. It is built on `setTimeout` on purpose, **not** `AbortSignal.timeout()`, so Vitest's fake timers can control it (see section 10).
 3. `fetch` gets `AbortSignal.any([unmountSignal, timeoutSignal])`.
-4. On an `AbortError`, the **unmount signal is checked first**: if `unmountSignal.aborted`, return `aborted`; otherwise return `timeout`. Unmount wins when both have fired, because there is no component left to show a message in.
-5. The form ignores `aborted` and doesn't update state, so nothing is set on an unmounted component.
+4. On an `AbortError`, the **unmount signal is checked first**: if it fired, the action returns a `fail` **without logging**; otherwise it is a timeout, which is logged. Unmount wins when both have fired, because there is no component left to show a message in.
+5. After the call, the form checks its own `signal.aborted` and returns without updating state, so nothing is set on an unmounted component.
 
-- Formatting uses `src/shared/lib/format.ts`:
+- Formatting uses `src/shared/lib/format.ts`, with `en-AU` formatting. Amounts are **Australian dollars (AUD)**:
   - `formatPercent(0.015)` → `1.50%`
   - `formatCurrency(3750)` → `$3,750.00`
-- Fields, button and alert come from `src/shared/ui/` and are styled with Tailwind.
+- The fields, button and (later) alert are plain HTML elements inline in the form, styled with Tailwind. There is no `shared/ui` layer: the form is the only place they are used.
 
 ## 4. App route contract
 
@@ -175,18 +181,21 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 
 **Responses:**
 
-| Status | When                                                                                                                                    | Body                                                                                                      |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `201`  | Quote generated                                                                                                                         | `CommissionQuote`                                                                                         |
-| `400`  | Request body fails the schema                                                                                                           | `{ "code": "INVALID_REQUEST", "message": "...", "issues": { "loanAmount": ["..."] } }`                    |
-| `502`  | **Any third-party failure**: API rejected the request, API key rejected, API error, unexpected API response, timeout or API unreachable | `{ "code": "QUOTE_UNAVAILABLE", "message": "We couldn't generate a quote right now. Please try again." }` |
-| `500`  | **Our own fault**: missing or invalid config (E13), or anything the route didn't expect (an uncaught exception, E16)                    | `{ "code": "INTERNAL_ERROR", "message": "We couldn't generate a quote right now. Please try again." }`    |
+Every answer has the same shape, `{ status, data }` (`src/shared/lib/api-response.ts`). The HTTP status code still says what happened:
 
-`502` vs `500` tells monitoring and on-call whose problem it is: `502` means the vendor failed, `500` means we did. A deploy with `COMMISSION_QUOTE_API_KEY` unset shows up as `500`s, so the vendor isn't blamed for it.
+| Status | When | Body |
+| --- | --- | --- |
+| `201` | Quote generated | `{ "status": "success", "data": { "quoteId": "…", "commissionRate": 0.015, "totalCommission": 3750 } }` |
+| `400` | Body isn't JSON | `{ "status": "fail", "data": { "message": "The request body must be JSON." } }` |
+| `400` | Body fails the schema | `{ "status": "fail", "data": { "message": "Some loan details aren't valid. Please check them and try again.", "issues": { "loanAmount": ["…"] } } }` |
+| `502` | **Any third-party failure**: API rejected the request, API key rejected, API error, unexpected API response, timeout or API unreachable | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }` |
+| `500` | **Our own fault**: anything the route didn't expect (an uncaught exception, E16) | `{ "status": "fail", "data": { "message": "We couldn't generate a quote right now. Please try again." } }` |
 
-- The route only reads JSON, calls `generateCommissionQuote()` and maps the result to a status. It holds no business logic.
+`502` vs `500` tells monitoring and on-call whose problem it is: `502` means the vendor failed, `500` means we did. A deploy with `COMMISSION_QUOTE_API_KEY` unset never gets this far: the server refuses to start (E13).
+
+- The route reads JSON, validates it with `commissionQuoteRequestSchema` (the same rules and messages as the form; unknown fields are dropped), calls `postCommissionQuote()` and maps the result to a status. The rules themselves live in `model.ts`, not in the route.
 - The whole handler is wrapped in one `try/catch`, so the route always returns one of the JSON bodies above and never Next.js's default HTML error page.
-- Only three error bodies ever reach the browser: `INVALID_REQUEST` (our own validation), `QUOTE_UNAVAILABLE` (any third-party failure) and `INTERNAL_ERROR` (our own bug or misconfiguration). Upstream status codes, messages, error codes, the API URL, the API key and stack traces are never forwarded.
+- A `fail` body only ever carries our own `message` (plus `issues` for invalid input), built with `successResponse()` / `failResponse()`. Upstream status codes, messages, error codes, the API URL, the API key and stack traces are never forwarded.
 - The specific failure is logged on the server, so it can still be diagnosed.
 
 ## 5. Third-party contract: Commission Quote API
@@ -200,59 +209,72 @@ Page: `src/app/page.tsx` (Server Component) renders `CommissionQuoteForm` (Clien
 | Errors       | `401` (bad or missing key), `422` (request rejected), `5xx` (service error), each with a `CommissionQuoteApiError` body |
 | Timeout      | Client aborts after `COMMISSION_QUOTE_API_TIMEOUT_MS`                                                                   |
 
-Client: `src/features/commission-quote/api/commission-quote-api-client.ts`. It is server-only. Like the browser-side `requestCommissionQuote()`, it catches **every** failure (network error, timeout, non-JSON body, unexpected status, body failing the `CommissionQuote` schema) and returns a typed outcome instead of throwing.
+Client: `src/features/commission-quote/vendor/commission-quote-api-client.ts`. It is server-only. Its function is `postCommissionQuote(request, config?)`; `config` defaults to the settings from the environment (checked at startup), so the route just calls `postCommissionQuote(request)` and tests can pass their own. Like the browser-side `generateCommissionQuoteAction()`, it catches **every** failure (network error, timeout, non-JSON body, unexpected status, body failing the `CommissionQuote` schema) and never throws. For anything other than a valid `201` quote it **logs the specific reason on the server** and returns `null`. Its return type is `CommissionQuote | null`, so the route then only has to choose between `201` and `502`.
 
 ## 6. Outcome mapping
 
-Both hops return a `Result` (a value or one known failure kind) instead of throwing, so no error can escape unhandled.
+Neither hop throws for an expected failure, so no error can escape unhandled. The server-side client returns `CommissionQuote | null`, and the browser action returns `{ status, data }`. TypeScript makes each caller handle the failure case before it can use the quote.
 
 ### Hop 2: app route → Commission Quote API (server)
 
-`generateCommissionQuote()` (`src/features/commission-quote/generate-quote/generate-commission-quote.ts`) keeps the specific kind so the server can log it. The app route collapses every third-party kind into the one `502` response, and `misconfigured` into `500`.
+The route validates the input, then calls `postCommissionQuote()` (`src/features/commission-quote/vendor/commission-quote-api-client.ts`). The client logs the specific reason (`[commission-quote] Commission Quote API …`) and returns `null` for every vendor failure, which the route turns into the one `502` response.
 
-| Situation                                                          | Scenario | Use case result (server log)            | App route returns         |
-| ------------------------------------------------------------------ | -------- | --------------------------------------- | ------------------------- |
-| Quote returned                                                     | S1–S3    | `ok` + `CommissionQuote`                | `201`                     |
-| Input fails schema                                                 | E6       | `invalid`                               | `400` `INVALID_REQUEST`   |
-| API returns `422`                                                  | E7       | `rejected`                              | `502` `QUOTE_UNAVAILABLE` |
-| API returns `401`                                                  | E8       | `unauthorized`                          | `502` `QUOTE_UNAVAILABLE` |
-| API returns `5xx`                                                  | E9       | `upstream`                              | `502` `QUOTE_UNAVAILABLE` |
-| API body is not JSON, has an unexpected status or fails the schema | E10      | `invalid-response`                      | `502` `QUOTE_UNAVAILABLE` |
-| API times out                                                      | E11      | `timeout`                               | `502` `QUOTE_UNAVAILABLE` |
-| API unreachable                                                    | E19      | `unreachable`                           | `502` `QUOTE_UNAVAILABLE` |
-| Config missing or invalid                                          | E13      | `misconfigured`                         | `500` `INTERNAL_ERROR`    |
-| Uncaught exception in the route                                    | E16      | n/a (caught by the route's `try/catch`) | `500` `INTERNAL_ERROR`    |
+| Situation | Scenario | Server log (`[commission-quote] Commission Quote API …`) | App route returns |
+| --- | --- | --- | --- |
+| Quote returned | S1–S3 | nothing | `201` |
+| Input fails schema | E6 | nothing (the vendor isn't called) | `400` `fail` |
+| API returns `422` | E7 | `rejected the request (422 <code>: <message>)` | `502` `fail` |
+| API returns `401` | E8 | `rejected the API key (401 <code>: <message>)` | `502` `fail` |
+| API returns `5xx` | E9 | `failed (<status> <code>: <message>)` | `502` `fail` |
+| `201` body is not JSON or not a `CommissionQuote` | E10 | `returned a 201 that is not a CommissionQuote` | `502` `fail` |
+| Any other status | E10 | `returned an unexpected status <status>` | `502` `fail` |
+| API times out | E11 | `timed out after <timeoutMs> ms` | `502` `fail` |
+| API unreachable | E19 | `unreachable: <error> (<cause>)` | `502` `fail` |
+| Uncaught exception in the route | E16 | `[commission-quote] unexpected error` + the error | `500` `fail` |
 
 ### Hop 1: UI → app route (browser)
 
-`requestCommissionQuote()` (`src/features/commission-quote/generate-quote/request-commission-quote.ts`) turns every response, or the lack of one, into a kind. The form maps the kind to a message.
+`generateCommissionQuoteAction()` (`src/features/commission-quote/generate-quote/generate-commission-quote-action.ts`) reads the body's `status` (not the HTTP code) and returns `{ status, data }` to the form for every response, or the lack of one. The form shows the quote, or `data.message` in the alert.
 
-| What the browser gets                                         | Scenario    | `requestCommissionQuote()` result             | UI shows                  |
-| ------------------------------------------------------------- | ----------- | --------------------------------------------- | ------------------------- |
-| `201` with a valid `CommissionQuote`                          | S1–S3       | `ok` + `CommissionQuote`                      | Result panel              |
-| `400` `INVALID_REQUEST`                                       | E6          | `invalid` + field issues                      | Field errors              |
-| `502` `QUOTE_UNAVAILABLE`                                     | E7–E11, E19 | `unavailable`                                 | Generic error             |
-| `500` `INTERNAL_ERROR`                                        | E13, E16    | `unavailable`                                 | Generic error             |
-| Non-JSON body, unexpected status, or `201` failing the schema | E17         | `unexpected` (details to the browser console) | Generic error             |
-| `AbortError` and only the timeout signal fired                | E15         | `timeout`                                     | Generic error             |
-| `fetch` throws a network error                                | E12         | `network`                                     | Generic error             |
-| `AbortError` and the unmount signal fired (checked first)     | E18         | `aborted`                                     | Nothing (no state update) |
-
-`timeout`, `network` and `unexpected` all show the generic error but stay separate kinds, so the browser console log and the tests can tell them apart.
+| What the browser gets | Scenario | Action returns | Browser console | UI shows |
+| --- | --- | --- | --- | --- |
+| `{ status: 'success' }` with a valid `CommissionQuote` as `data` | S1–S3 | `{ status: 'success', data: quote }` | nothing | Result panel |
+| `{ status: 'fail' }` with `502` / `500` | E7–E11, E16, E19 | the route's `fail`, unchanged | `<status> <message>` | `data.message` (the generic error) |
+| `{ status: 'fail' }` with `400` (only if form and server rules are out of step, e.g. an old tab during a deploy) | E6 | the route's `fail`, unchanged | `400 <message>` | "Some loan details aren't valid. Please check them and try again." |
+| Not a `{ status, data }` body (e.g. an HTML error page or non-JSON), or `success` without a valid quote | E17 | generic `fail` | `<status> reply is not a valid { status, data }` | Generic error |
+| No answer within `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` | E15 | generic `fail` | `no answer within 10000 ms` | Generic error |
+| `fetch` throws a network error | E12 | generic `fail` | `network error: <message>` | Generic error |
+| The unmount signal fired (checked first) | E18 | generic `fail` | nothing | Nothing (the form checks its own signal; no state update) |
 
 The API key, the API URL, stack traces and anything the Commission Quote API returns in an error are never sent to the browser.
 
 ## 7. Configuration
 
-Read only on the server, from `.env.local`, by `commission-quote-api-config.ts`. Parsed with Zod through `src/shared/config/env.ts`. If a value is missing or invalid, the server logs an error naming the variable and the request fails as in scenario E13 (`500`). The variable names and values are never sent to the browser.
+Read only on the server, from `.env.local`, by `readCommissionQuoteApiConfig()` in `commission-quote-api-config.ts`, which starts with `import 'server-only'`. It returns `{ baseUrl, apiKey, timeoutMs }`, or **throws** one error listing every problem.
 
-| Variable                          | Rule                                                                               | Local default                                |
-| --------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------- |
-| `COMMISSION_QUOTE_API_BASE_URL`   | Valid URL                                                                          | `http://localhost:4010/commission-quote-api` |
-| `COMMISSION_QUOTE_API_KEY`        | Non-empty                                                                          | `local-dev-key`                              |
-| `COMMISSION_QUOTE_API_TIMEOUT_MS` | Whole number from 1 to `GENERATE_QUOTE_REQUEST_TIMEOUT_MS − 1000` (9000), optional | `5000`                                       |
+**Checked at startup (E13):** `src/instrumentation.ts` runs `register()` when the server starts, and on Node.js it loads `src/instrumentation-node.ts`, which calls it once. (The check is in its own file because `instrumentation.ts` is also compiled for the Edge runtime, which has no `process.exit`.) On an error it prints the problem list and calls `process.exit(1)`. A plain `throw` isn't enough: Next only logs an error from `register()` and keeps serving, answering every request with `500`. Verified with both `next start` and `next dev`. With `pnpm dev`, `concurrently` then stops the mock too. `next build` doesn't run `register()`, so building works without `.env.local`. Request-time code can assume the config is valid; if it ever threw anyway, the route's `try/catch` would return `500` (E16).
 
-The browser-side timeout is **not** an env variable. `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (`10000`) is a constant in `src/features/commission-quote/timeouts.ts`, a plain module with no `server-only` import. Both `request-commission-quote.ts` (browser) and `commission-quote-api-config.ts` (server) import it, so the upper limit on `COMMISSION_QUOTE_API_TIMEOUT_MS` comes from the real constant and can't drift. Setting it to `15000` fails config parsing with a message that names the variable and the limit.
+```
+Invalid Commission Quote API configuration:
+  - COMMISSION_QUOTE_API_BASE_URL: must be an http(s) URL
+  - COMMISSION_QUOTE_API_KEY: must not be empty
+```
+
+Each problem reads `"<VARIABLE>: <rule>"`, and **values are never included**, so the API key can't end up in a log. The config is read on every call (cheap), so tests can pass their own env object.
+
+| Variable                          | Rule                                                                                 | Local default                                |
+| --------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
+| `COMMISSION_QUOTE_API_BASE_URL`   | `http` or `https` URL (`localhost` allowed). A trailing `/` is removed.              | `http://localhost:4010/commission-quote-api` |
+| `COMMISSION_QUOTE_API_KEY`        | Not empty after trimming                                                             | `local-dev-key`                              |
+| `COMMISSION_QUOTE_API_TIMEOUT_MS` | Optional; empty counts as unset. Whole number from 1 to `COMMISSION_QUOTE_API_TIMEOUT_MAX_MS` (9000) | `COMMISSION_QUOTE_API_TIMEOUT_DEFAULT_MS` (5000) |
+
+The browser-side timeout is **not** an env variable: `GENERATE_QUOTE_REQUEST_TIMEOUT_MS` (`10000`) is exported from `generate-commission-quote-action.ts`, the browser code that uses it. That file is client-safe, so the server config can import it too. The server-side constants are local to `commission-quote-api-config.ts`, the only file that uses them:
+- `COMMISSION_QUOTE_API_TIMEOUT_DEFAULT_MS` (`5000`);
+- `COMMISSION_QUOTE_API_TIMEOUT_MAX_MS` (`GENERATE_QUOTE_REQUEST_TIMEOUT_MS − 1000`), worked out from the browser constant so the two can't drift apart.
+
+Both `generate-commission-quote-action.ts` (browser) and `commission-quote-api-config.ts` (server) import it, so the upper limit can't drift. Setting the timeout to `15000` fails with `COMMISSION_QUOTE_API_TIMEOUT_MS: must be a whole number from 1 to 9000`.
+
+**Unit tests and `server-only`:** the package throws when loaded outside a React Server bundler, Vitest in Node included. The Vitest `unit` project therefore aliases it to the package's own empty module. `next build` still enforces the boundary.
 
 ## 8. Mock Commission Quote API
 
@@ -268,7 +290,7 @@ Its settings are constants at the top of `server.mjs`. It reads no environment v
 
 `server.mjs` is kept deliberately small (about 90 lines, Node built-ins only), because it is a local stand-in, not production code. It doesn't check fixtures at startup. A typo shows up as a wrong response or a crash in the `[mock]` output.
 
-**API key:** the mock checks that an `x-api-key` header is present **and** has a value. A missing header, an empty value or whitespace only gets `401`. Any other value is accepted, so it rejects requests without a key but not requests with a wrong key. The app's handling of a rejected key (E8) is tested with MSW, not against the mock.
+**API key:** the mock checks that an `x-api-key` header is present **and** has a value. A missing header, an empty value or whitespace only gets `401`. Any other value is accepted, so it rejects requests without a key but not requests with a wrong key. The app's handling of a rejected key (E8) is tested with a stubbed `fetch` in the API client's unit tests, not against the mock.
 
 The mock returns **pre-configured JSON only**. It does not calculate anything, so `totalCommission` is a fixed value per risk band whatever loan amount is entered.
 
@@ -319,7 +341,7 @@ Rule 3 is the real simulation of network conditions. Any valid request can fail 
 | Connection dropped  | The mock closes the socket without replying, so the app route sees a network error (E19) |
 
 - The mock prints the error it picked and why to its terminal, e.g. `[mock] random failure (rate 0.2) → 503 service-unavailable` or `[mock] forced (loanAmount 13) → 422 validation-error`, so you can see what happened behind the generic message.
-- Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user sees. Tests that need one specific error use MSW in unit tests instead (see below).
+- Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user sees. Tests that need one specific error stub `fetch` in unit tests instead (see below).
 
 Example fixture values:
 
@@ -331,9 +353,9 @@ Example fixture values:
 
 The mock keeps no state between requests.
 
-**Adding an error:** add a JSON file to `fixtures/` and an entry to the error pool in `scenarios.json`. No code change is needed. `fixtures.contract.test.ts` fails if a fixture no longer matches the data model (except `invalid-quote.json`, which must **fail** to parse as `CommissionQuote`).
+**Adding an error:** add a JSON file to `fixtures/` and an entry to the error pool in `scenarios.json`. No code change is needed. Fixtures aren't tested on their own: the API client checks every `201` reply against `CommissionQuote` at runtime, so a quote fixture that drifts from the model shows up as a failing e2e happy path.
 
-The same fixtures are served by MSW in unit tests. There, each test picks the exact fixture it needs (no randomness), so every error kind is tested deterministically.
+In unit tests, `fetch` is replaced with `vi.fn()`, and each test returns exactly the response it needs (no randomness), so every error kind is tested deterministically. MSW isn't used: for one endpoint, stubbing `fetch` needs no extra library.
 
 The mock only covers hop 2. Hop 1 errors (E12, E15–E18) can't come from the mock, because they happen between the browser and our own app route. They are tested by stubbing `fetch` in unit and browser tests (see section 10).
 
@@ -341,6 +363,8 @@ The mock only covers hop 2. Hop 1 errors (E12, E15–E18) can't come from the mo
 
 ```
 src/
+├── instrumentation.ts                             # loads instrumentation-node.ts on Node.js only
+├── instrumentation-node.ts                        # startup check: exits if the API config is invalid (E13)
 ├── app/
 │   ├── page.tsx                                   # renders the form
 │   ├── page.e2e.ts
@@ -349,20 +373,15 @@ src/
 │       └── route.test.ts
 ├── features/commission-quote/
 │   ├── model.ts · model.test.ts
-│   ├── timeouts.ts                                # GENERATE_QUOTE_REQUEST_TIMEOUT_MS (shared by browser + server)
 │   ├── generate-quote/
-│   │   ├── generate-commission-quote.ts · .test.ts      # hop 2 use case (server-only)
-│   │   ├── request-commission-quote.ts · .test.ts       # hop 1 call to the app route (client-safe)
+│   │   ├── generate-commission-quote-action.ts · .test.ts       # hop 1 call to the app route (client-safe)
 │   │   ├── commission-quote-form.tsx · .browser.test.tsx
 │   │   └── commission-quote-result.tsx · .browser.test.tsx
-│   └── api/
+│   └── vendor/
 │       ├── commission-quote-api-config.ts · .test.ts
-│       ├── commission-quote-api-client.ts · .test.ts
-│       └── fixtures.contract.test.ts
+│       └── commission-quote-api-client.ts · .test.ts
 └── shared/
-    ├── ui/        button, number-field, select-field, alert
-    ├── lib/       format.ts · format.test.ts, result.ts
-    └── config/    env.ts · env.test.ts
+    └── lib/       format.ts · format.test.ts, api-response.ts · api-response.test.ts
 mock-api/
 ├── server.mjs                # serves each <name>-api/ folder under /<name>-api
 └── commission-quote-api/
@@ -377,12 +396,10 @@ mock-api/
 | Layer              | File                                                 | Covers                                                                                                                                                                                                                                                                                                                              | Scenarios                  |
 | ------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | Model              | `model.test.ts`                                      | Each field required; amount > 0, ≤ 100,000,000 and at most 2 decimals (`0.29` and `0.1 + 0.2` accepted, `0.001` and `1e300` rejected); term is a whole number from 1 to 600; risk band limited to the three values                                                                                                                  | E1–E4, E20, E21 rules      |
-| Fixtures           | `fixtures.contract.test.ts`                          | Every success fixture parses as `CommissionQuote`; every error fixture as `CommissionQuoteApiError`; `invalid-quote.json` does **not** parse                                                                                                                                                                                        | S2, E7–E10 data            |
-| Config             | `commission-quote-api-config.test.ts`, `env.test.ts` | Missing or invalid values fail with a message naming the variable; timeout default applied; timeout `9000` accepted, `9001` and `15000` rejected                                                                                                                                                                                    | E13                        |
-| API client (hop 2) | `commission-quote-api-client.test.ts`                | Sends `x-api-key`; parses success; maps 401, 422, 5xx, non-JSON body, unexpected status, schema mismatch, timeout and network error; never throws                                                                                                                                                                                   | S1, E7–E11, E19            |
-| Use case (hop 2)   | `generate-commission-quote.test.ts`                  | Invalid input is rejected without calling the API; a quote for each risk band; each specific failure kind; missing config                                                                                                                                                                                                           | S2, E6–E11, E13, E19       |
-| App route          | `route.test.ts`                                      | `ok` → `201`; `invalid` or non-JSON request body → `400`; **every** third-party kind → the same `502` generic body; `misconfigured` and a thrown exception → `500` `INTERNAL_ERROR`; no upstream detail or stack trace in any body                                                                                                  | E6–E11, E13, E16, E19      |
-| Request (hop 1)    | `request-commission-quote.test.ts`                   | Maps `201`, `400`, `500`, `502`, non-JSON body, unexpected status, schema mismatch, network error to their kinds; with fake timers: timer fires → `timeout`; unmount signal aborted → `aborted`; both fired → `aborted`; timer cleared after a response; never throws                                                               | E6, E12, E15–E18           |
+| Config             | `commission-quote-api-config.test.ts`                | Missing or invalid values throw one error naming every bad variable (never a value); timeout default applied; timeout `9000` accepted, `9001` and `15000` rejected                                                                                                                                                                  | E13                        |
+| API client (hop 2) | `commission-quote-api-client.test.ts`                | Sends `x-api-key`; returns the quote for a valid 201 without logging; 401, 422, 5xx, non-JSON or invalid 201, unexpected status, timeout and network error each return `null` **and log their own reason**; never logs the API key; never throws | S1, E7–E11, E19            |
+| App route          | `route.test.ts`                                      | a quote → `201`; invalid, non-JSON or non-object body → `400` without calling the client, only contract fields passed to it; the client returning `null` → `502` with the generic body; a thrown exception → `500` `fail`; no upstream detail or stack trace in any body                                                                                                                      | E6–E11, E16, E19           |
+| Request (hop 1)    | `generate-commission-quote-action.test.ts`                   | Returns `{ status, data }`: success passes the quote through; a route `fail` (400/500/502) passes through with its message; HTML, non-JSON, a bare quote or `success` without a quote → generic `fail`; network error and (fake-timer) timeout → generic `fail`; each failure logs its reason, a successful quote and an unmount log nothing; unmount wins when both fired; timer cleared after a response; never throws | E6, E12, E15–E18           |
 | Formatting         | `format.test.ts`                                     | `0.015` → `1.50%`; `3750` → `$3,750.00`                                                                                                                                                                                                                                                                                             | S1                         |
 | Form (browser)     | `commission-quote-form.browser.test.tsx`             | Generate disabled until valid; field errors after touch; no double submit; every failure kind shows the generic error; no message after unmount; alert cleared on retry; new result replaces old                                                                                                                 | S3, E1–E5, E12, E14–E18, E20, E21 |
 | Result (browser)   | `commission-quote-result.browser.test.tsx`           | Shows quote ID, formatted rate and total                                                                                                                                                                                                                                                                                            | S1                         |
@@ -393,6 +410,6 @@ Playwright starts the mock and the app (production build) itself. Because the mo
 ## 11. Out of scope
 
 - Login (see the extension points in doc 01).
-- Quote approval. Planned location: `src/features/commission-quote/approve-quote/` (use case + button); app route `src/app/api/commission-quotes/[quoteId]/approval/route.ts`; a new function in the existing API client; new fixtures and rules in `mock-api/commission-quote-api/`.
+- Quote approval. Planned location: `src/features/commission-quote/approve-quote/` (button + browser action); app route `src/app/api/commission-quotes/[quoteId]/approval/route.ts`; a new function in the existing API client; new fixtures and rules in `mock-api/commission-quote-api/`.
 - Storing quotes in this app. The quote exists only in the Commission Quote API and on screen.
 - Calculating commission locally. The Commission Quote API is the source of truth.
