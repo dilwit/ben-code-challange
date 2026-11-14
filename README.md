@@ -72,6 +72,13 @@ Tests sit next to the code they test:
 - `*.browser.test.tsx`: component tests (Vitest browser mode, Chromium)
 - `*.e2e.ts`: end-to-end tests (Playwright)
 
+## AI usage
+
+I used **Claude Code** (Anthropic's Claude) as a pair programmer throughout this challenge.
+
+- **Design before code.** I worked out the design and implmentation with Claude in two docs (`docs/architecture/`), This is a result of interactive sesssion between me and Claude where ideas were bounced and agreed for the given scope.
+- **Implementation.** 90% of the code is written by the Claude, layer by layer with human review at every layer. And many decision were challanged and simplification applied as part of human review.
+
 ## Documentation
 
 - [Project structure and tech stack](docs/architecture/01-project-structure-and-tech-stack.md)
