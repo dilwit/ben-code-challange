@@ -296,7 +296,7 @@ Its settings are constants at the top of `server.mjs`. It reads no environment v
 
 **API key:** the mock accepts only `x-api-key: local-dev-key` (`API_KEY`), the key in `.env.example`. A missing header or any other value gets `401` (E8): the app logs "rejected the API key" and the browser gets the generic `502`. Playwright gives the app the same key.
 
-The mock returns **pre-configured JSON**, with one calculation. Each quote response in `scenarios.json` declares `"commissionOf": "loanAmount"`, so the mock takes `commissionRate` from the band's fixture and sets `totalCommission = loanAmount × commissionRate`, rounded to cents (e.g. $10,000 at MEDIUM → `150`). The rate depends only on the risk band; the loan term is ignored. If `loanAmount` isn't a positive number, the mock returns the `422` fallback.
+The mock returns **pre-configured JSON only**. It doesn't calculate anything, so each risk band always returns the same quote from its fixture, whatever loan amount or term is entered (e.g. MEDIUM is always `Q-MED-0001`, `0.015`, `3750`).
 
 ### Scenarios
 
@@ -314,7 +314,7 @@ Rules live in `scenarios.json` and are checked in order:
 
 A request whose method and path match no route gets `404`.
 
-`scenarios.json` declares everything, so `server.mjs` holds no API-specific logic. Its only calculation is the generic `commissionOf` rule above:
+`scenarios.json` declares everything, so `server.mjs` holds no API-specific logic:
 
 ```json
 {
@@ -330,12 +330,7 @@ A request whose method and path match no route gets `404`.
         "…"
       ],
       "responses": [
-        {
-          "when": { "riskBand": "LOW" },
-          "status": 201,
-          "fixture": "quote-low.json",
-          "commissionOf": "loanAmount"
-        },
+        { "when": { "riskBand": "LOW" }, "status": 201, "fixture": "quote-low.json" },
         "…"
       ],
       "fallback": { "status": 422, "fixture": "validation-error.json" }
@@ -362,7 +357,7 @@ Rule 3 is the real simulation of network conditions. Any valid request can fail 
 - The mock prints the error it picked and why to its terminal, e.g. `[mock] random failure (rate 0.2) → 503 service-unavailable` or `[mock] forced (loanAmount 13) → 422 validation-error`, so you can see what happened behind the generic message.
 - Because the browser only ever shows the generic error for a hop 2 failure, _which_ error is picked never changes what a user sees. Tests that need one specific error stub `fetch` in unit tests instead (see below).
 
-Example fixture values. `totalCommission` in the files is the value for a $250,000 loan; the mock replaces it with the calculated total:
+Fixture values (returned as they are, whatever the loan amount):
 
 | Fixture             | `quoteId`     | `commissionRate` | `totalCommission` |
 | ------------------- | ------------- | ---------------- | ----------------- |

@@ -6,31 +6,31 @@ For local development it runs against a bundled mock Commission Quote API.
 
 ## Prerequisites
 
-- Node.js 22 or later
+- Node.js 22 (LTS); developed and tested on 22.14
 - pnpm 10 (`corepack enable` installs it using the version pinned in `package.json`)
 
 ## Run locally
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/dilwit/ben-code-challange.git
 cd ben-code-challange
-corepack enable
+corepack enable                 # answer Y if it asks to download pnpm
 pnpm install
 cp .env.example .env.local      # local API URL + key, already set for the mock API
 pnpm dev                        # starts the mock API (port 4010) and the app (port 3000)
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. Ports 3000 and 4010 must be free; if the mock can't start, `pnpm dev` stops both.
 
 ## Try it out
 
-| Input                                                                               | Result                                                                                                                                                                                                                           |
-| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Any valid loan amount (e.g. `250000`), term and risk band `LOW` / `MEDIUM` / `HIGH` | A quote for that band most of the time: total commission = loan amount × band rate (LOW 1%, MEDIUM 1.5%, HIGH 2%). About 1 in 5 requests fail at random (`ERROR_RATE` in `mock-api/server.mjs`) to simulate an unreliable vendor |
-| Loan amount `13`                                                                    | Always an API error, picked at random: rejected request, server error, service unavailable, unexpected response, timeout or connection dropped                                                                                   |
-| Empty `COMMISSION_QUOTE_API_KEY` in `.env.local`                                    | The app **refuses to start** and lists every invalid setting (never its value). `pnpm dev` stops the mock too                                                                                                                    |
-| Wrong `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed)                   | The mock rejects the key (`401`); the browser shows the generic error and the terminal shows "rejected the API key". The mock accepts only `local-dev-key`                                                                       |
-| Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600`            | Clicking **Generate quote** shows the field error and sends nothing                                                                                                                                                              |
+| Input                                                                               | Result                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Any valid loan amount (e.g. `250000`), term and risk band `LOW` / `MEDIUM` / `HIGH` | A quote for that band most of the time. The mock returns a fixed quote per band, whatever the loan amount or term (LOW $2,500 at 1%, MEDIUM $3,750 at 1.5%, HIGH $5,000 at 2%). About 1 in 5 requests fail at random (`ERROR_RATE` in `mock-api/server.mjs`) to simulate an unreliable vendor |
+| Loan amount `13`                                                                    | Always an API error, picked at random: rejected request, server error, service unavailable, unexpected response, timeout or connection dropped                                                                                                                                                |
+| Empty `COMMISSION_QUOTE_API_KEY` in `.env.local`                                    | The app **refuses to start** and lists every invalid setting (never its value). `pnpm dev` stops the mock too                                                                                                                                                                                 |
+| Wrong `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed)                   | The mock rejects the key (`401`); the browser shows the generic error and the terminal shows "rejected the API key". The mock accepts only `local-dev-key`                                                                                                                                    |
+| Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600`            | Clicking **Generate quote** shows the field error and sends nothing                                                                                                                                                                                                                           |
 
 **Generate quote** is always clickable (except while a quote is being generated). If anything is missing or invalid, clicking it shows every field's error and moves focus to the first one; nothing is sent until all three are valid.
 
@@ -39,14 +39,14 @@ What the browser shows:
 - **Field errors** for invalid input, under the field.
 - **The same generic error** for every failure once the request is sent: vendor API failures, server-side problems, a lost connection, or no answer from the app's server within 10 seconds. The terminal running `pnpm dev` shows which error the mock picked and why; the browser console shows the cause of browser-side failures.
 
-Mock responses live in `mock-api/commission-quote-api/fixtures/`. Edit them, or `scenarios.json`, to change what the mock returns. Each band's rate comes from its `quote-*.json` fixture, and the mock calculates `totalCommission` from the loan amount. To change how often it fails at random, edit `ERROR_RATE` at the top of `mock-api/server.mjs` (`0` never, `1` always) and restart.
+Mock responses live in `mock-api/commission-quote-api/fixtures/`. Edit them, or `scenarios.json`, to change what the mock returns. Each band's quote is the fixed content of its `quote-*.json` fixture; the mock doesn't calculate anything. To change how often it fails at random, edit `ERROR_RATE` at the top of `mock-api/server.mjs` (`0` never, `1` always) and restart.
 
 ## Configuration (`.env.local`)
 
 | Variable                          | Purpose                                                               | Local default                                |
 | --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
 | `COMMISSION_QUOTE_API_BASE_URL`   | Commission Quote API base URL                                         | `http://localhost:4010/commission-quote-api` |
-| `COMMISSION_QUOTE_API_KEY`        | API key sent as                                                       | `local-dev-key`                              |
+| `COMMISSION_QUOTE_API_KEY`        | API key sent as `x-api-key`                                           | `local-dev-key`                              |
 | `COMMISSION_QUOTE_API_TIMEOUT_MS` | Server-to-API timeout, 1–9000 ms (must stay under the browser's 10 s) | `5000`                                       |
 
 These are read only on the server and never sent to the browser. Never commit `.env.local`.
@@ -56,9 +56,6 @@ These are read only on the server and never sent to the browser. Never commit `.
 | Command         | What it does                                                          |
 | --------------- | --------------------------------------------------------------------- |
 | `pnpm dev`      | Run the mock API (4010) and the app (3000) together                   |
-| `pnpm mock`     | Run the mock API on its own (e.g. alongside `pnpm start`)             |
-| `pnpm build`    | Build for production (also type-checks)                               |
-| `pnpm start`    | Run the production build                                              |
 | `pnpm test`     | Unit and component tests (Vitest)                                     |
 | `pnpm test:e2e` | End-to-end tests (Playwright; starts the mock API and the app itself) |
 
