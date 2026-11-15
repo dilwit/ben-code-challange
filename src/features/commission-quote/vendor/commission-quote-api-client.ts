@@ -1,4 +1,5 @@
 import 'server-only'
+import { parseJson } from '@/shared/lib/parse-json'
 import {
   commissionQuoteApiErrorSchema,
   commissionQuoteSchema,
@@ -71,14 +72,6 @@ function unavailable(reason: string): null {
 function apiError(body: unknown): string {
   const parsed = commissionQuoteApiErrorSchema.safeParse(body)
   return parsed.success ? `${parsed.data.code}: ${parsed.data.message}` : 'no error body'
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
 }
 
 function describe(error: unknown): string {

@@ -3,7 +3,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
-import { z } from 'zod'
 import {
   commissionQuoteRequestSchema,
   RISK_BANDS,
@@ -11,26 +10,14 @@ import {
   type CommissionQuote,
 } from '../model'
 import CommissionQuoteResult from './commission-quote-result'
-import { generateCommissionQuoteAction } from './generate-commission-quote-action'
+import { requestCommissionQuote } from './request-commission-quote'
 
-// The form validates with the same rules and messages as the server (model.ts), so invalid input
-// is caught in the browser before anything is sent (doc 02, sections 1 and 3).
+// The form validates with the server's own schema (model.ts), so invalid input is caught in the
+// browser with the same rules and messages before anything is sent (doc 02, sections 1 and 3).
 //
-// Inputs hold text, but the schema expects numbers. An empty field must count as missing, not 0:
-// Number('') is 0, which would show "greater than 0" for a field the user hasn't filled in.
-const toNumber = (text: string) => (text.trim() === '' ? undefined : Number(text))
-const emptyToUndefined = (text: string) => (text === '' ? undefined : text)
-
-// Text in → the shared request rules and messages, unchanged.
-const { shape } = commissionQuoteRequestSchema
-const commissionQuoteFormSchema = z.object({
-  loanAmount: z.string().transform(toNumber).pipe(shape.loanAmount),
-  loanTermInMonths: z.string().transform(toNumber).pipe(shape.loanTermInMonths),
-  riskBand: z.string().transform(emptyToUndefined).pipe(shape.riskBand),
-})
-
-/** What the fields hold: `{ loanAmount: string; loanTermInMonths: string; riskBand: string }`. */
-type FormValues = z.input<typeof commissionQuoteFormSchema>
+// The number fields are text inputs; valueAsNumber turns their text into a number, and empty or
+// unreadable text into NaN, which the schema rejects with the field's message. The risk band
+// starts on the empty placeholder (defaultValue=""), which the schema rejects as missing.
 
 const RISK_BAND_LABELS: Record<(typeof RISK_BANDS)[number], string> = {
   LOW: 'Low',
@@ -48,14 +35,13 @@ export default function CommissionQuoteForm() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues, unknown, CommissionQuoteRequest>({
-    resolver: zodResolver(commissionQuoteFormSchema),
+  } = useForm<CommissionQuoteRequest>({
+    resolver: zodResolver(commissionQuoteRequestSchema),
     // Errors first appear when Generate is clicked (all at once, focus on the first), then update
     // as the user types. Not on leaving a field: an error appearing then pushes the button down
     // mid-click, and the click is lost.
     mode: 'onSubmit',
     reValidateMode: 'onChange',
-    defaultValues: { loanAmount: '', loanTermInMonths: '', riskBand: '' },
   })
 
   const [isGenerating, setIsGenerating] = useState(false)
@@ -79,7 +65,7 @@ export default function CommissionQuoteForm() {
     setQuote(null) // the new result replaces the old one (S3)
 
     const signal = unmount.current?.signal ?? new AbortController().signal
-    const response = await generateCommissionQuoteAction(request, { signal })
+    const response = await requestCommissionQuote(request, { signal })
     if (signal.aborted) return // the user left: show nothing, set no state (E18)
 
     setIsGenerating(false)
@@ -95,7 +81,10 @@ export default function CommissionQuoteForm() {
       <form
         noValidate
         onSubmit={(event) => handleSubmit(onGenerate)(event)}
-        onChange={() => setQuote(null)}
+        onChange={() => {
+          setQuote(null)
+          setGenerationError(null)
+        }}
         className="mt-6"
       >
         {/* Disabled while generating, so the values can't change mid-request. */}
@@ -109,7 +98,7 @@ export default function CommissionQuoteForm() {
               className={inputClass}
               aria-invalid={errors.loanAmount ? true : undefined}
               aria-describedby={errors.loanAmount ? 'loanAmount-error' : undefined}
-              {...register('loanAmount')}
+              {...register('loanAmount', { valueAsNumber: true })}
             />
           </Field>
 
@@ -126,13 +115,15 @@ export default function CommissionQuoteForm() {
               className={inputClass}
               aria-invalid={errors.loanTermInMonths ? true : undefined}
               aria-describedby={errors.loanTermInMonths ? 'loanTermInMonths-error' : undefined}
-              {...register('loanTermInMonths')}
+              {...register('loanTermInMonths', { valueAsNumber: true })}
             />
           </Field>
 
           <Field id="riskBand" label="Risk band" error={errors.riskBand?.message}>
+            {/* defaultValue="": otherwise the browser selects Low, the first enabled option. */}
             <select
               id="riskBand"
+              defaultValue=""
               className={inputClass}
               aria-invalid={errors.riskBand ? true : undefined}
               aria-describedby={errors.riskBand ? 'riskBand-error' : undefined}

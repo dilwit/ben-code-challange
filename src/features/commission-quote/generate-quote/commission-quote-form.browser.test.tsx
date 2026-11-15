@@ -61,6 +61,11 @@ describe('CommissionQuoteForm', () => {
     await expect.element(generate).toBeEnabled()
   })
 
+  it('starts with no risk band selected, not the first option', async () => {
+    const { riskBand } = await renderForm()
+    await expect.element(riskBand).toHaveValue('')
+  })
+
   it('shows every missing field, focuses the first and sends nothing when Generate is clicked (E1)', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

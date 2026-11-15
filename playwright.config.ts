@@ -29,7 +29,7 @@ export default defineConfig({
       timeout: 180_000,
       env: {
         COMMISSION_QUOTE_API_BASE_URL: 'http://localhost:4010/commission-quote-api',
-        COMMISSION_QUOTE_API_KEY: 'local-dev-key', // the key the mock accepts
+        COMMISSION_QUOTE_API_KEY: 'local-dev-key', // the key in .env.example; the mock accepts any non-empty key
       },
     },
   ],

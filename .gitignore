@@ -159,3 +159,6 @@ vite.config.ts.timestamp-*
 
 # Vitest browser mode attachments
 .vitest/
+
+# Claude Code personal settings
+.claude/settings.local.json

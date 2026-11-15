@@ -44,19 +44,18 @@ describe('POST /api/commission-quotes', () => {
     expect(client.mock.calls[0]?.[0]).toEqual(valid)
   })
 
-  it('returns a 400 fail with field issues, without calling the client (E6)', async () => {
+  it('returns a 400 fail and logs the field errors, without calling the client (E6)', async () => {
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const response = await post({ ...valid, loanAmount: 0, riskBand: 'EXTREME' })
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       status: 'fail',
-      data: {
-        message: "Some loan details aren't valid. Please check them and try again.",
-        issues: {
-          loanAmount: ['Enter a loan amount greater than 0'],
-          riskBand: ['Select a risk band'],
-        },
-      },
+      data: { message: "Some loan details aren't valid. Please check them and try again." },
+    })
+    expect(log).toHaveBeenCalledWith('[commission-quote] invalid request', {
+      loanAmount: ['Enter a loan amount greater than 0'],
+      riskBand: ['Select a risk band'],
     })
     expect(client).not.toHaveBeenCalled()
   })

@@ -1,5 +1,6 @@
-import { z } from 'zod'
-import type { ApiResponse } from '@/shared/lib/api-response'
+import 'client-only'
+import { apiResponseSchema, type ApiResponse } from '@/shared/lib/api-response'
+import { parseJson } from '@/shared/lib/parse-json'
 import {
   commissionQuoteSchema,
   GENERATE_QUOTE_REQUEST_TIMEOUT_MS,
@@ -11,22 +12,18 @@ import {
 // POST /api/commission-quotes, and returns the same { status, data } shape the route uses.
 // Its own failures (timeout, network error, a reply it can't read) become a 'fail' with the
 // generic message, and the reason goes to the browser console. It never throws.
-//
-// Despite the name, this is a plain client-side function calling an HTTP route, not a
-// Next.js Server Action ('use server').
+// Browser-only: the relative URL only resolves in a browser, so the build fails if server code
+// imports this file.
 
 const GENERIC_FAIL = {
   status: 'fail',
   data: { message: "We couldn't generate a quote right now. Please try again." },
 } as const
 
-/** What the route may answer. A 'fail' keeps only its message (issues are dropped). */
-const routeReplySchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('success'), data: commissionQuoteSchema }),
-  z.object({ status: z.literal('fail'), data: z.object({ message: z.string() }) }),
-])
+/** What the route may answer. */
+const routeReplySchema = apiResponseSchema(commissionQuoteSchema)
 
-export async function generateCommissionQuoteAction(
+export async function requestCommissionQuote(
   request: CommissionQuoteRequest,
   { signal: unmountSignal }: { signal: AbortSignal },
 ): Promise<ApiResponse<CommissionQuote>> {
@@ -71,12 +68,4 @@ export async function generateCommissionQuoteAction(
 function failed(reason: string) {
   console.error(`Commission quote request failed: ${reason}`)
   return GENERIC_FAIL
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
 }

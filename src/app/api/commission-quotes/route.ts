@@ -22,11 +22,10 @@ export async function POST(request: Request): Promise<Response> {
     // Unknown fields are dropped, so only the contract reaches the vendor.
     const parsed = commissionQuoteRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return failResponse(
-        400,
-        "Some loan details aren't valid. Please check them and try again.",
-        z.flattenError(parsed.error).fieldErrors,
-      )
+      // Only reachable past the form (it checks the same rules), so log which fields failed.
+      // These are the fixed messages from model.ts, never the values sent.
+      console.warn('[commission-quote] invalid request', z.flattenError(parsed.error).fieldErrors)
+      return failResponse(400, "Some loan details aren't valid. Please check them and try again.")
     }
 
     const quote = await postCommissionQuote(parsed.data)

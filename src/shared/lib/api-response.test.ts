@@ -20,13 +20,4 @@ describe('failResponse', () => {
     expect(response.status).toBe(502)
     expect(await response.json()).toEqual({ status: 'fail', data: { message: 'Try again.' } })
   })
-
-  it('includes issues only when given', async () => {
-    const issues = { loanAmount: ['Enter a loan amount greater than 0'] }
-    expect(await failResponse(400, 'Check the fields.', issues).json()).toEqual({
-      status: 'fail',
-      data: { message: 'Check the fields.', issues },
-    })
-    expect(await failResponse(400, 'No issues.').json()).not.toHaveProperty('data.issues')
-  })
 })

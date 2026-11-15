@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { GENERATE_QUOTE_REQUEST_TIMEOUT_MS } from '../model'
-import { generateCommissionQuoteAction } from './generate-commission-quote-action'
+import { requestCommissionQuote } from './request-commission-quote'
 
 const request = { loanAmount: 250000, loanTermInMonths: 360, riskBand: 'MEDIUM' as const }
 const quote = { quoteId: 'Q-MED-0001', commissionRate: 0.015, totalCommission: 3750 }
@@ -40,8 +40,7 @@ function serverHangs({ rejectDelayMs }: { rejectDelayMs?: number } = {}) {
   )
 }
 
-const call = (signal = new AbortController().signal) =>
-  generateCommissionQuoteAction(request, { signal })
+const call = (signal = new AbortController().signal) => requestCommissionQuote(request, { signal })
 
 beforeEach(() => {
   log = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -53,7 +52,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('generateCommissionQuoteAction', () => {
+describe('requestCommissionQuote', () => {
   it('posts the request as JSON to /api/commission-quotes', async () => {
     const fetchMock = serverReplies(201, { status: 'success', data: quote })
     await call()
@@ -77,7 +76,7 @@ describe('generateCommissionQuoteAction', () => {
   ])(
     "passes a %s fail through with the route's message, and logs it (E6–E11, E16, E19)",
     async (httpStatus, message) => {
-      serverReplies(httpStatus, { status: 'fail', data: { message, issues: { x: ['y'] } } })
+      serverReplies(httpStatus, { status: 'fail', data: { message } })
       expect(await call()).toEqual({ status: 'fail', data: { message } })
       expect(log).toHaveBeenCalledWith(`Commission quote request failed: ${httpStatus} ${message}`)
     },

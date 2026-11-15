@@ -29,7 +29,6 @@ Open http://localhost:3000. Ports 3000 and 4010 must be free; if the mock can't 
 | Any valid loan amount (e.g. `250000`), term and risk band `LOW` / `MEDIUM` / `HIGH` | A quote for that band most of the time. The mock returns a fixed quote per band, whatever the loan amount or term (LOW $2,500 at 1%, MEDIUM $3,750 at 1.5%, HIGH $5,000 at 2%). About 1 in 5 requests fail at random (`ERROR_RATE` in `mock-api/server.mjs`) to simulate an unreliable vendor |
 | Loan amount `13`                                                                    | Always an API error, picked at random: rejected request, server error, service unavailable, unexpected response, timeout or connection dropped                                                                                                                                                |
 | Empty `COMMISSION_QUOTE_API_KEY` in `.env.local`                                    | The app **refuses to start** and lists every invalid setting (never its value). `pnpm dev` stops the mock too                                                                                                                                                                                 |
-| Wrong `COMMISSION_QUOTE_API_KEY` in `.env.local` (restart needed)                   | The mock rejects the key (`401`); the browser shows the generic error and the terminal shows "rejected the API key". The mock accepts only `local-dev-key`                                                                                                                                    |
 | Amount `0`, `0.001` or above `100000000`; term `0`, `1.5` or above `600`            | Clicking **Generate Quote** shows the field error and sends nothing                                                                                                                                                                                                                           |
 
 **Generate Quote** is always clickable (except while a quote is being generated). If anything is missing or invalid, clicking it shows every field's error and moves focus to the first one; nothing is sent until all three are valid.
@@ -73,16 +72,18 @@ Tests sit next to the code they test:
 
 I used **Claude Code** (Anthropic's Claude) as a pair programmer throughout this challenge.
 
-- **Design before code.** I worked out the design and implementation with Claude in two docs (`docs/architecture/`). This is the result of an interactive session between me and Claude where ideas were bounced and agreed for the given scope.
-- **Implementation.** 90% of the code is written by Claude, layer by layer with human review at every layer. Many decisions were challenged, and simplifications applied, as part of human review.
+- **Design before code.** I worked through the design and implementation approach with Claude, documenting the outcome in two documents under `docs/architecture/`. These documents reflect an interactive process where we explored different ideas, challenged assumptions, discussed trade-offs and agreed on an approach that best suited the scope.
+- **Implementation.** Claude was used to develop the code as part of an AI-assisted engineering approach, working through each layer step by step. I reviewed the implementation at every stage, challenged design decisions, questioned assumptions and simplified things wherever possible. The aim was not just to generate code, but to make sure the final solution was well thought out, maintainable and aligned with the intended design.
 
 ## Future improvements
 
-- Add an authentication and authorisation layer for the web app, where the user is required to log in and all app routes stay behind the logged-in context.
-- Add retry capability for the vendor integration.
-- Improve observability with appropriate logging and OpenTelemetry (OTel).
-- Expand the e2e test cases, and run the browser and e2e tests in Firefox and WebKit (Safari) as well as Chromium.
-- Confirm the business assumptions.
+- **Authentication and authorisation.** Require users to log in and keep all app routes, including `POST /api/commission-quotes`, behind the logged-in context.
+- **Retries for the vendor integration.** Retry only failures that may succeed on a second attempt (`503`, timeout, dropped connection), never `401` or `422`; use an idempotency key so a retried POST can't create a duplicate quote; and keep the total time, including backoff, under the browser's 10 s timeout.
+- **Better logging.** Replace the `console.error` strings with structured logs, and add a request ID that is logged on the server and shown with the generic error so support can trace a failure.
+- **More tests.** Make the mock's random error rate configurable so e2e runs are deterministic, add e2e tests for the error paths, and run the browser and e2e tests in Firefox and WebKit (Safari) as well as Chromium.
+- **Confirm the business assumptions:**
+  - loan amount up to $100,000,000 with at most 2 decimal places; term 1–600 whole months
+  - amounts are AUD, shown in `en-AU` format
 
 ## Documentation
 
