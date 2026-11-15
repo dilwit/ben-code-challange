@@ -204,7 +204,7 @@ Every answer has the same shape, `{ status, data }` (`src/shared/lib/api-respons
 | Item         | Value                                                                                                                   |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | Endpoint     | `POST {COMMISSION_QUOTE_API_BASE_URL}/commission-quotes`                                                                |
-| Auth         | Header `x-api-key: {COMMISSION_QUOTE_API_KEY}`                                                                          |
+| Auth         | Header `api-key: {COMMISSION_QUOTE_API_KEY}`                                                                            |
 | Request body | `CommissionQuoteRequest`                                                                                                |
 | Success      | `201` with `CommissionQuote`                                                                                            |
 | Errors       | `401` (bad or missing key), `422` (request rejected), `5xx` (service error), each with a `CommissionQuoteApiError` body |
@@ -292,7 +292,7 @@ Its settings are constants at the top of `server.mjs`. It reads no environment v
 
 `server.mjs` is kept deliberately small (about 90 lines, Node built-ins only), because it is a local stand-in, not production code. It doesn't check fixtures at startup. A typo shows up as a wrong response or a crash in the `[mock]` output.
 
-**API key:** the mock accepts any non-empty `x-api-key`; it doesn't check the value. A missing or empty header gets `401` (E8). The app never sends one, because it refuses to start with an empty `COMMISSION_QUOTE_API_KEY` (E13), so E8 is covered by the API client's unit tests rather than by the mock.
+**API key:** the mock accepts any non-empty `api-key`; it doesn't check the value. A missing or empty header gets `401` (E8). The app never sends one, because it refuses to start with an empty `COMMISSION_QUOTE_API_KEY` (E13), so E8 is covered by the API client's unit tests rather than by the mock.
 
 The mock returns **pre-configured JSON only**. It doesn't calculate anything, so each risk band always returns the same quote from its fixture, whatever loan amount or term is entered (e.g. MEDIUM is always `Q-MED-0001`, `0.015`, `3750`).
 
@@ -302,7 +302,7 @@ Rules live in `scenarios.json` and are checked in order:
 
 | #   | Request                                                                                                                    | Response                                                                                                    |
 | --- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 1   | `x-api-key` header missing or empty (E8)                                                                                   | `401` `unauthorized.json`                                                                                   |
+| 1   | `api-key` header missing or empty (E8)                                                                                     | `401` `unauthorized.json`                                                                                   |
 | 2   | `loanAmount` equals `13` (`forceError` in `scenarios.json`)                                                                | **One error picked at random** from the error pool below. A deterministic way to get _an_ error, for demos. |
 | 3   | **Any other request, at random**, with probability `ERROR_RATE` (`0.2`, i.e. about 1 in 5)                                 | **One error picked at random** from the error pool below                                                    |
 | 4   | `riskBand` = `LOW`                                                                                                         | `201` `quote-low.json`, `totalCommission` = `loanAmount` × `0.01`                                           |
@@ -320,7 +320,7 @@ A request whose method and path match no route gets `404`.
     {
       "method": "POST",
       "path": "/commission-quotes",
-      "auth": { "header": "x-api-key", "status": 401, "fixture": "unauthorized.json" },
+      "auth": { "header": "api-key", "status": 401, "fixture": "unauthorized.json" },
       "forceError": { "field": "loanAmount", "equals": 13 },
       "errorPool": [
         { "name": "server-error", "status": 500, "fixture": "server-error.json" },
@@ -409,7 +409,7 @@ mock-api/
 | ------------------ | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
 | Model              | `model.test.ts`                            | Each field required; amount > 0, ≤ 100,000,000 and at most 2 decimals (`0.29` and `0.1 + 0.2` accepted, `0.001` and `1e300` rejected); term is a whole number from 1 to 600; risk band limited to the three values                                                                                                                                                                                                       | E1–E4, E20, E21 rules             |
 | Config             | `commission-quote-api-config.test.ts`      | Missing or invalid values throw one error naming every bad variable (never a value); timeout default applied; timeout `9000` accepted, `9001` and `15000` rejected                                                                                                                                                                                                                                                       | E13                               |
-| API client (hop 2) | `commission-quote-api-client.test.ts`      | Sends `x-api-key`; returns the quote for a valid 201 without logging; 401, 422, 5xx, non-JSON or invalid 201, unexpected status, timeout and network error each return `null` **and log their own reason**; never logs the API key; never throws                                                                                                                                                                         | S1, E7–E11, E19                   |
+| API client (hop 2) | `commission-quote-api-client.test.ts`      | Sends `api-key`; returns the quote for a valid 201 without logging; 401, 422, 5xx, non-JSON or invalid 201, unexpected status, timeout and network error each return `null` **and log their own reason**; never logs the API key; never throws                                                                                                                                                                           | S1, E7–E11, E19                   |
 | App route          | `route.test.ts`                            | a quote → `201`; invalid, non-JSON or non-object body → `400` without calling the client, only contract fields passed to it; the client returning `null` → `502` with the generic body; a thrown exception → `500` `fail`; no upstream detail or stack trace in any body                                                                                                                                                 | E6–E11, E16, E19                  |
 | Request (hop 1)    | `request-commission-quote.test.ts`         | Returns `{ status, data }`: success passes the quote through; a route `fail` (400/500/502) passes through with its message; HTML, non-JSON, a bare quote or `success` without a quote → generic `fail`; network error and (fake-timer) timeout → generic `fail`; each failure logs its reason, a successful quote and an unmount log nothing; unmount wins when both fired; timer cleared after a response; never throws | E6, E12, E15–E18                  |
 | Formatting         | `format.test.ts`                           | `0.015` → `1.50%`; `3750` → `$3,750.00`                                                                                                                                                                                                                                                                                                                                                                                  | S1                                |

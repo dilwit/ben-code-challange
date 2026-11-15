@@ -45,7 +45,7 @@ Mock responses live in `mock-api/commission-quote-api/fixtures/`. Edit them, or 
 | Variable                          | Purpose                                                               | Local default                                |
 | --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- |
 | `COMMISSION_QUOTE_API_BASE_URL`   | Commission Quote API base URL                                         | `http://localhost:4010/commission-quote-api` |
-| `COMMISSION_QUOTE_API_KEY`        | API key sent as `x-api-key`                                           | `local-dev-key`                              |
+| `COMMISSION_QUOTE_API_KEY`        | API key sent as `api-key`                                             | `local-dev-key`                              |
 | `COMMISSION_QUOTE_API_TIMEOUT_MS` | Server-to-API timeout, 1–9000 ms (must stay under the browser's 10 s) | `5000`                                       |
 
 These are read only on the server and never sent to the browser. Never commit `.env.local`.

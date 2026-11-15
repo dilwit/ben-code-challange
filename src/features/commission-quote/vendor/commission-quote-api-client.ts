@@ -33,7 +33,7 @@ export async function postCommissionQuote(
       headers: {
         'content-type': 'application/json',
         accept: 'application/json',
-        'x-api-key': config.apiKey,
+        'api-key': config.apiKey,
       },
       body: JSON.stringify(request),
       // Covers waiting for the response and reading its body.

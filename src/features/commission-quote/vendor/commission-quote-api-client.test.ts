@@ -37,7 +37,7 @@ afterEach(() => {
 })
 
 describe('postCommissionQuote', () => {
-  it('posts the request with the x-api-key header to {baseUrl}/commission-quotes', async () => {
+  it('posts the request with the api-key header to {baseUrl}/commission-quotes', async () => {
     const fetchMock = vendorReplies(201, quote)
     await postCommissionQuote(request, config)
 
@@ -45,7 +45,7 @@ describe('postCommissionQuote', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://vendor.test/api/commission-quotes')
     expect(init.method).toBe('POST')
-    expect(init.headers).toMatchObject({ 'x-api-key': 'secret-key' })
+    expect(init.headers).toMatchObject({ 'api-key': 'secret-key' })
     expect(JSON.parse(init.body as string)).toEqual(request)
     expect(init.signal).toBeInstanceOf(AbortSignal)
   })
@@ -58,7 +58,7 @@ describe('postCommissionQuote', () => {
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://env-vendor.test/v1/commission-quotes')
-    expect(init.headers).toMatchObject({ 'x-api-key': 'env-key' })
+    expect(init.headers).toMatchObject({ 'api-key': 'env-key' })
   })
 
   it('returns the quote for a 201, without logging (S1)', async () => {
